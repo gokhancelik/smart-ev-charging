@@ -9,3 +9,7 @@ Thumbs.db
 # Home Assistant dev artifacts
 *.log
 secrets.yaml
+
+# Python
+__pycache__/
+*.pyc

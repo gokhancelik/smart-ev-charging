@@ -1,0 +1,11 @@
+{
+  "domain": "smart_ev_charging",
+  "name": "Smart EV Charging",
+  "codeowners": ["@gokhancelik"],
+  "config_flow": true,
+  "documentation": "https://github.com/gokhancelik/smart-ev-charging",
+  "issue_tracker": "https://github.com/gokhancelik/smart-ev-charging/issues",
+  "iot_class": "local_push",
+  "requirements": [],
+  "version": "2.0.0"
+}

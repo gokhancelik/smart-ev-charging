@@ -1,0 +1,41 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Smart EV Charging",
+        "description": "Point Smart EV Charging at the entities exposed by your vehicle/charger and price integrations. Required fields must belong to the domain shown; optional fields can be left empty.",
+        "data": {
+          "vehicle_connected": "Vehicle connected (binary_sensor)",
+          "charging_active": "Charging active (binary_sensor)",
+          "price": "Current electricity price (sensor)",
+          "cheap_price": "Cheap electricity (binary_sensor)",
+          "battery": "Battery percentage (optional, sensor)",
+          "power": "Charging power (optional, sensor)",
+          "energy": "Energy meter (optional, sensor)",
+          "departure_calendar": "Departure calendar (optional, calendar)"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Smart EV Charging is already configured. This integration supports a single vehicle; see the README for multi-vehicle setup."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Update Smart EV Charging entities",
+        "description": "Change the entities Smart EV Charging is pointed at.",
+        "data": {
+          "vehicle_connected": "Vehicle connected (binary_sensor)",
+          "charging_active": "Charging active (binary_sensor)",
+          "price": "Current electricity price (sensor)",
+          "cheap_price": "Cheap electricity (binary_sensor)",
+          "battery": "Battery percentage (optional, sensor)",
+          "power": "Charging power (optional, sensor)",
+          "energy": "Energy meter (optional, sensor)",
+          "departure_calendar": "Departure calendar (optional, calendar)"
+        }
+      }
+    }
+  }
+}
