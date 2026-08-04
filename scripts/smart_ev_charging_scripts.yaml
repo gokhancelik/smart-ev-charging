@@ -12,6 +12,38 @@
 ########################################################################
 
 # ------------------------------------------------------------------
+# Internal: record the automation's latest decision for the debug
+# dashboard section, and optionally mirror it to the Logbook when
+# input_boolean.ev_debug_logging is enabled. Centralizing this avoids
+# duplicating the same two-step logic at every decision point in the
+# blueprint.
+# ------------------------------------------------------------------
+ev_debug_log:
+  alias: "EV - Debug Log"
+  mode: parallel
+  max: 20
+  fields:
+    message:
+      description: Human-readable decision text.
+      example: "Starting: price is cheap (0.18)"
+  sequence:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.ev_last_charging_decision
+      data:
+        value: "{{ message }}"
+    - if:
+        - condition: state
+          entity_id: input_boolean.ev_debug_logging
+          state: "on"
+      then:
+        - action: logbook.log
+          data:
+            name: "Smart EV Charging"
+            message: "{{ message }}"
+            entity_id: input_text.ev_last_charging_decision
+
+# ------------------------------------------------------------------
 # Internal: seed session tracking helpers exactly once per session
 # ------------------------------------------------------------------
 ev_seed_session_helpers:
@@ -61,11 +93,9 @@ ev_notify_plugged_in:
               entity_id: input_boolean.ev_follow_price
               state: "off"
           sequence:
-            - action: input_text.set_value
-              target:
-                entity_id: input_text.ev_last_charging_decision
+            - action: script.ev_debug_log
               data:
-                value: "Manual mode: charging immediately on plug-in"
+                message: "Manual mode: charging immediately on plug-in"
             - action: input_boolean.turn_on
               target:
                 entity_id: input_boolean.ev_charge_now_override
@@ -76,11 +106,9 @@ ev_notify_plugged_in:
               entity_id: binary_sensor.ev_quiet_hours_active
               state: "on"
           sequence:
-            - action: input_text.set_value
-              target:
-                entity_id: input_text.ev_last_charging_decision
+            - action: script.ev_debug_log
               data:
-                value: "Plugged in during quiet hours - notification suppressed"
+                message: "Plugged in during quiet hours - notification suppressed"
       default:
         - action: "{{ notify_service }}"
           data:

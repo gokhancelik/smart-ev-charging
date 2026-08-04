@@ -214,11 +214,9 @@ actions:
           - action: input_boolean.turn_off
             target:
               entity_id: input_boolean.ev_charge_now_override
-          - action: input_text.set_value
-            target:
-              entity_id: input_text.ev_last_charging_decision
+          - action: script.ev_debug_log
             data:
-              value: "Vehicle disconnected"
+              message: "Vehicle disconnected"
 
       # -----------------------------------------------------------------
       # Price became cheap: start charging if conditions are met
@@ -245,11 +243,9 @@ actions:
                  or battery_percentage in ['', none]
                  or (states(battery_percentage) | float(0)) < (states('input_number.ev_target_battery_percentage') | float(100)) }}
         sequence:
-          - action: input_text.set_value
-            target:
-              entity_id: input_text.ev_last_charging_decision
+          - action: script.ev_debug_log
             data:
-              value: "Starting: price is cheap ({{ states(current_price) }})"
+              message: "Starting: price is cheap ({{ states(current_price) }})"
           - action: !input start_charging_action
 
       # -----------------------------------------------------------------
@@ -268,11 +264,9 @@ actions:
             entity_id: !input charging_active
             state: "on"
         sequence:
-          - action: input_text.set_value
-            target:
-              entity_id: input_text.ev_last_charging_decision
+          - action: script.ev_debug_log
             data:
-              value: "Stopping: price is no longer cheap ({{ states(current_price) }})"
+              message: "Stopping: price is no longer cheap ({{ states(current_price) }})"
           - action: !input stop_charging_action
 
       # -----------------------------------------------------------------
@@ -317,11 +311,9 @@ actions:
             value_template: >-
               {{ (states(battery_percentage) | float(0)) >= (states('input_number.ev_target_battery_percentage') | float(100)) }}
         sequence:
-          - action: input_text.set_value
-            target:
-              entity_id: input_text.ev_last_charging_decision
+          - action: script.ev_debug_log
             data:
-              value: "Stopping: target battery percentage reached ({{ states(battery_percentage) }}%)"
+              message: "Stopping: target battery percentage reached ({{ states(battery_percentage) }}%)"
           - action: !input stop_charging_action
 
       # -----------------------------------------------------------------
@@ -349,11 +341,9 @@ actions:
                     value_template: >-
                       {{ (states(battery_percentage) | float(100)) <= (states('input_number.ev_low_battery_threshold') | float(0)) }}
                 sequence:
-                  - action: input_text.set_value
-                    target:
-                      entity_id: input_text.ev_last_charging_decision
+                  - action: script.ev_debug_log
                     data:
-                      value: "Starting: low battery emergency ({{ states(battery_percentage) }}%)"
+                      message: "Starting: low battery emergency ({{ states(battery_percentage) }}%)"
                   - action: !input start_charging_action
 
               # Departure deadline approaching: force start regardless of price
@@ -363,21 +353,24 @@ actions:
                     state: "on"
                   - condition: template
                     value_template: >-
-                      {% set dep = states('input_datetime.ev_departure_time') %}
-                      {% if dep in ['unknown', 'unavailable', ''] %}
-                        {{ false }}
+                      {% set cal = states('input_text.ev_departure_calendar_entity') %}
+                      {% if cal not in ['', 'unknown', 'unavailable'] and state_attr(cal, 'start_time') %}
+                        {% set next_dep = strptime(state_attr(cal, 'start_time'), '%Y-%m-%d %H:%M:%S') %}
+                        {{ ((next_dep - now()).total_seconds() / 60) <= (deadline_lead_time_minutes | float(120)) }}
                       {% else %}
-                        {% set today_dep = today_at(dep) %}
-                        {% set next_dep = today_dep if today_dep > now() else today_dep + timedelta(days=1) %}
-                        {% set minutes_left = (next_dep - now()).total_seconds() / 60 %}
-                        {{ minutes_left <= (deadline_lead_time_minutes | float(120)) }}
+                        {% set dep = states('input_datetime.ev_departure_time') %}
+                        {% if dep in ['unknown', 'unavailable', ''] %}
+                          {{ false }}
+                        {% else %}
+                          {% set today_dep = today_at(dep) %}
+                          {% set next_dep = today_dep if today_dep > now() else today_dep + timedelta(days=1) %}
+                          {{ ((next_dep - now()).total_seconds() / 60) <= (deadline_lead_time_minutes | float(120)) }}
+                        {% endif %}
                       {% endif %}
                 sequence:
-                  - action: input_text.set_value
-                    target:
-                      entity_id: input_text.ev_last_charging_decision
+                  - action: script.ev_debug_log
                     data:
-                      value: "Starting: departure deadline approaching"
+                      message: "Starting: departure deadline approaching"
                   - action: !input start_charging_action
 
       # -----------------------------------------------------------------
@@ -409,11 +402,9 @@ actions:
             entity_id: !input charging_active
             state: "off"
         sequence:
-          - action: input_text.set_value
-            target:
-              entity_id: input_text.ev_last_charging_decision
+          - action: script.ev_debug_log
             data:
-              value: "Starting: manual 'Charge now' request"
+              message: "Starting: manual 'Charge now' request"
           - action: !input start_charging_action
 
       # -----------------------------------------------------------------
@@ -429,11 +420,9 @@ actions:
                 entity_id: !input charging_active
                 state: "on"
             then:
-              - action: input_text.set_value
-                target:
-                  entity_id: input_text.ev_last_charging_decision
+              - action: script.ev_debug_log
                 data:
-                  value: "Stopping: manual 'Stop charging' request"
+                  message: "Stopping: manual 'Stop charging' request"
               - action: !input stop_charging_action
           - action: input_boolean.turn_off
             target:

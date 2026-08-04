@@ -366,6 +366,42 @@ template:
           {{ ent not in ['', 'unknown', 'unavailable'] and states(ent) not in ['unknown', 'unavailable'] }}
 
       # ---------------------------------------------------------------
+      # Battery percentage (passthrough with a stable entity_id, needed
+      # so dashboard cards — which cannot resolve an entity ID stored
+      # in a helper — have something fixed to point at)
+      # ---------------------------------------------------------------
+      - name: "EV Battery Percentage"
+        unique_id: ev_battery_percentage
+        icon: mdi:battery-high
+        unit_of_measurement: "%"
+        device_class: battery
+        state_class: measurement
+        state: >-
+          {% set ent = states('input_text.ev_battery_entity') %}
+          {{ states(ent) if ent not in ['', 'unknown', 'unavailable'] and states(ent) not in ['unknown', 'unavailable'] else none }}
+        availability: >-
+          {% set ent = states('input_text.ev_battery_entity') %}
+          {{ ent not in ['', 'unknown', 'unavailable'] and states(ent) not in ['unknown', 'unavailable'] }}
+
+      # ---------------------------------------------------------------
+      # Charging power (passthrough with a stable entity_id)
+      # ---------------------------------------------------------------
+      - name: "EV Charging Power"
+        unique_id: ev_charging_power
+        icon: mdi:flash
+        device_class: power
+        state_class: measurement
+        unit_of_measurement: >-
+          {% set ent = states('input_text.ev_power_entity') %}
+          {{ state_attr(ent, 'unit_of_measurement') if ent not in ['', 'unknown', 'unavailable'] else none }}
+        state: >-
+          {% set ent = states('input_text.ev_power_entity') %}
+          {{ states(ent) if ent not in ['', 'unknown', 'unavailable'] and states(ent) not in ['unknown', 'unavailable'] else none }}
+        availability: >-
+          {% set ent = states('input_text.ev_power_entity') %}
+          {{ ent not in ['', 'unknown', 'unavailable'] and states(ent) not in ['unknown', 'unavailable'] }}
+
+      # ---------------------------------------------------------------
       # Charging duration (minutes) — grows while charging is active
       # ---------------------------------------------------------------
       - name: "EV Charging Duration"
@@ -508,6 +544,14 @@ template:
             0
           {% endif %}
 
+      # ---------------------------------------------------------------
+      # Static package version (bump alongside CHANGELOG.md / hacs.json)
+      # ---------------------------------------------------------------
+      - name: "EV Smart Charging Version"
+        unique_id: ev_smart_charging_version
+        icon: mdi:tag-outline
+        state: "1.0.0"
+
   - binary_sensor:
       # ---------------------------------------------------------------
       # Quiet hours window (handles overnight wraparound, e.g. 22:00-06:00)
@@ -528,6 +572,34 @@ template:
               {{ now_t >= start or now_t < end }}
             {% endif %}
           {% endif %}
+
+      # ---------------------------------------------------------------
+      # Stable mirrors of the configured vehicle/charger entities, so
+      # dashboard cards have a fixed entity_id to point at.
+      # ---------------------------------------------------------------
+      - name: "EV Vehicle Connected"
+        unique_id: ev_vehicle_connected
+        device_class: plug
+        state: >-
+          {% set ent = states('input_text.ev_vehicle_connected_entity') %}
+          {{ ent not in ['', 'unknown', 'unavailable'] and is_state(ent, 'on') }}
+        availability: "{{ states('input_text.ev_vehicle_connected_entity') not in ['', 'unknown', 'unavailable'] }}"
+
+      - name: "EV Charging Active"
+        unique_id: ev_charging_active
+        device_class: battery_charging
+        state: >-
+          {% set ent = states('input_text.ev_charging_active_entity') %}
+          {{ ent not in ['', 'unknown', 'unavailable'] and is_state(ent, 'on') }}
+        availability: "{{ states('input_text.ev_charging_active_entity') not in ['', 'unknown', 'unavailable'] }}"
+
+      - name: "EV Price Cheap"
+        unique_id: ev_price_cheap
+        icon: mdi:cash-check
+        state: >-
+          {% set ent = states('input_text.ev_cheap_price_entity') %}
+          {{ ent not in ['', 'unknown', 'unavailable'] and is_state(ent, 'on') }}
+        availability: "{{ states('input_text.ev_cheap_price_entity') not in ['', 'unknown', 'unavailable'] }}"
 
 ########################################################################
 # NOTIFICATION ACTION LISTENER
