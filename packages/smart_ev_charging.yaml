@@ -102,6 +102,20 @@ input_boolean:
     name: "EV Charge Now (this session only)"
     icon: mdi:lightning-bolt
 
+  # Momentary "pulse" helper used to request an immediate stop from a
+  # script/dashboard/notification button. The blueprint resets it back
+  # to off after acting on it.
+  ev_stop_charging_requested:
+    name: "EV Stop Charging Request (internal)"
+    icon: mdi:stop-circle
+
+  # Authoritative "is a charging session currently being tracked" flag.
+  # More reliable than checking input_datetime for emptiness, since
+  # input_datetime cannot be cleared back to "unknown" once set.
+  ev_session_tracking:
+    name: "EV Session Tracking Active (internal)"
+    icon: mdi:record-circle-outline
+
   ev_target_battery_enabled:
     name: "EV Stop At Target Battery %"
     icon: mdi:battery-charging-80

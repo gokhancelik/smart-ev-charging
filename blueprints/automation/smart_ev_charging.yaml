@@ -167,10 +167,27 @@ triggers:
     trigger: time_pattern
     minutes: "/10"
 
+  # 8b. "Charge now" pressed (dashboard button or notification action)
+  - id: manual_charge_now
+    trigger: state
+    entity_id: input_boolean.ev_charge_now_override
+    to: "on"
+
+  # 8c. "Stop charging" pressed (dashboard button or notification action)
+  - id: manual_stop_requested
+    trigger: state
+    entity_id: input_boolean.ev_stop_charging_requested
+    to: "on"
+
   # 9. Catch up gracefully after a Home Assistant restart
   - id: ha_restart
     trigger: homeassistant
     event: start
+
+  # 10. Refresh the live "charging" notification periodically
+  - id: notification_refresh
+    trigger: time_pattern
+    minutes: "/5"
 
 conditions: []
 
@@ -364,6 +381,65 @@ actions:
                   - action: !input start_charging_action
 
       # -----------------------------------------------------------------
+      # Periodic refresh of the live "charging" notification so battery
+      # %, duration, energy and price stay current while plugged in.
+      # -----------------------------------------------------------------
+      - conditions:
+          - condition: trigger
+            id: notification_refresh
+          - condition: state
+            entity_id: !input charging_active
+            state: "on"
+        sequence:
+          - action: script.ev_notify_charging_started
+            data:
+              notify_service: "{{ notify_service }}"
+              energy_meter: "{{ energy_meter }}"
+
+      # -----------------------------------------------------------------
+      # Manual "Charge now" request: bypass price checks entirely
+      # -----------------------------------------------------------------
+      - conditions:
+          - condition: trigger
+            id: manual_charge_now
+          - condition: state
+            entity_id: !input vehicle_connected
+            state: "on"
+          - condition: state
+            entity_id: !input charging_active
+            state: "off"
+        sequence:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.ev_last_charging_decision
+            data:
+              value: "Starting: manual 'Charge now' request"
+          - action: !input start_charging_action
+
+      # -----------------------------------------------------------------
+      # Manual "Stop charging" request. Always resets the request pulse,
+      # even if charging was not actually active (button pressed twice).
+      # -----------------------------------------------------------------
+      - conditions:
+          - condition: trigger
+            id: manual_stop_requested
+        sequence:
+          - if:
+              - condition: state
+                entity_id: !input charging_active
+                state: "on"
+            then:
+              - action: input_text.set_value
+                target:
+                  entity_id: input_text.ev_last_charging_decision
+                data:
+                  value: "Stopping: manual 'Stop charging' request"
+              - action: !input stop_charging_action
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.ev_stop_charging_requested
+
+      # -----------------------------------------------------------------
       # Home Assistant restart: if charging is already active but our
       # session helpers were never seeded (e.g. HA restarted mid-session),
       # back-fill them without sending a duplicate notification.
@@ -374,8 +450,9 @@ actions:
           - condition: state
             entity_id: !input charging_active
             state: "on"
-          - condition: template
-            value_template: "{{ states('input_datetime.ev_charge_start_time') in ['unknown', 'unavailable', ''] }}"
+          - condition: state
+            entity_id: input_boolean.ev_session_tracking
+            state: "off"
         sequence:
           - action: script.ev_seed_session_helpers
             data:

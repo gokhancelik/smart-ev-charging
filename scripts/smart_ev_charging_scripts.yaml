@@ -1,0 +1,275 @@
+########################################################################
+# Smart EV Charging — Scripts
+#
+# Merge this file with: script: !include_dir_merge_named scripts
+#
+# These scripts contain all reusable notification-building and
+# session-bookkeeping logic so the blueprint automation and dashboard
+# buttons stay thin and free of duplicated logic. Notifications only
+# use fields supported by BOTH the Android and iOS Home Assistant
+# Companion apps; a few Android-only convenience keys (channel,
+# sticky) are included but are silently ignored on iOS.
+########################################################################
+
+# ------------------------------------------------------------------
+# Internal: seed session tracking helpers exactly once per session
+# ------------------------------------------------------------------
+ev_seed_session_helpers:
+  alias: "EV - Seed Session Helpers"
+  mode: single
+  fields:
+    energy_meter:
+      description: Entity ID of the optional energy meter sensor.
+      example: sensor.charger_energy
+  sequence:
+    - action: input_datetime.set_datetime
+      target:
+        entity_id: input_datetime.ev_charge_start_time
+      data:
+        datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+    - action: input_number.set_value
+      target:
+        entity_id: input_number.ev_charge_start_energy
+      data:
+        value: >-
+          {% set ent = energy_meter | default('') %}
+          {{ states(ent) | float(0) if ent not in ['', 'unknown', 'unavailable'] and states(ent) not in ['unknown', 'unavailable'] else 0 }}
+    - action: input_number.set_value
+      target:
+        entity_id: input_number.ev_charge_start_price
+      data:
+        value: "{{ states('sensor.ev_charging_price') | float(0) }}"
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.ev_session_tracking
+
+# ------------------------------------------------------------------
+# Vehicle plugged in
+# ------------------------------------------------------------------
+ev_notify_plugged_in:
+  alias: "EV - Notify Plugged In"
+  mode: single
+  fields:
+    notify_service:
+      description: Notify service to send to, e.g. notify.mobile_app_pixel_7.
+      example: notify.mobile_app_pixel_7
+  sequence:
+    - choose:
+        # Manual mode: skip the "waiting" notification, start right away
+        - conditions:
+            - condition: state
+              entity_id: input_boolean.ev_follow_price
+              state: "off"
+          sequence:
+            - action: input_text.set_value
+              target:
+                entity_id: input_text.ev_last_charging_decision
+              data:
+                value: "Manual mode: charging immediately on plug-in"
+            - action: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.ev_charge_now_override
+
+        # Quiet hours: stay silent, smart charging still runs normally
+        - conditions:
+            - condition: state
+              entity_id: binary_sensor.ev_quiet_hours_active
+              state: "on"
+          sequence:
+            - action: input_text.set_value
+              target:
+                entity_id: input_text.ev_last_charging_decision
+              data:
+                value: "Plugged in during quiet hours - notification suppressed"
+      default:
+        - action: "{{ notify_service }}"
+          data:
+            title: "🔌 EV plugged in"
+            message: "Charging is scheduled for the next cheap electricity period."
+            data:
+              tag: ev_charging
+              channel: "EV Charging"
+              actions:
+                - action: "EV_CHARGE_NOW"
+                  title: "⚡ Charge now"
+
+# ------------------------------------------------------------------
+# Charging started / periodic refresh while charging
+# ------------------------------------------------------------------
+ev_notify_charging_started:
+  alias: "EV - Notify Charging Started / Refresh"
+  mode: single
+  fields:
+    notify_service:
+      description: Notify service to send to.
+      example: notify.mobile_app_pixel_7
+    energy_meter:
+      description: Entity ID of the optional energy meter sensor.
+      example: sensor.charger_energy
+  sequence:
+    - if:
+        - condition: state
+          entity_id: input_boolean.ev_session_tracking
+          state: "off"
+      then:
+        - action: script.ev_seed_session_helpers
+          data:
+            energy_meter: "{{ energy_meter }}"
+    - variables:
+        battery: "{{ states('input_text.ev_battery_entity') }}"
+        power: "{{ states('input_text.ev_power_entity') }}"
+        duration_min: "{{ states('sensor.ev_charging_duration') | float(0) | round(0, 'floor') | int }}"
+        message: |-
+          🔋 Battery: {{ (states(battery) + '%') if battery not in ['', 'unknown', 'unavailable'] and states(battery) not in ['unknown', 'unavailable'] else 'n/a' }}
+          💶 Price: {{ states('sensor.ev_charging_price') }} {{ state_attr('sensor.ev_charging_price', 'unit_of_measurement') or '' }}
+          🕒 Started: {{ as_timestamp(states('input_datetime.ev_charge_start_time')) | timestamp_custom('%H:%M', true) }}
+          ⏱ Duration: {{ '%02d:%02d' | format(duration_min // 60, duration_min % 60) }}
+          ⚡ Power: {{ (states(power) + ' kW') if power not in ['', 'unknown', 'unavailable'] and states(power) not in ['unknown', 'unavailable'] else 'n/a' }}
+          🔌 Energy added: {{ states('sensor.ev_charging_session_energy') if states('sensor.ev_charging_session_energy') not in ['unknown', 'unavailable', 'none', none] else 'n/a' }} kWh
+    - action: "{{ notify_service }}"
+      data:
+        title: "⚡ Charging"
+        message: "{{ message }}"
+        data:
+          tag: ev_charging
+          channel: "EV Charging"
+          sticky: true
+          persistent: true
+          actions:
+            - action: "EV_STOP_CHARGING"
+              title: "⏹ Stop charging"
+
+# ------------------------------------------------------------------
+# Charging finished
+# ------------------------------------------------------------------
+ev_notify_charging_finished:
+  alias: "EV - Notify Charging Finished"
+  mode: single
+  fields:
+    notify_service:
+      description: Notify service to send to.
+      example: notify.mobile_app_pixel_7
+  sequence:
+    - if:
+        - condition: state
+          entity_id: input_boolean.ev_session_tracking
+          state: "off"
+      then:
+        - stop: "No tracked session to finish."
+    - variables:
+        energy_added: "{{ states('sensor.ev_charging_session_energy') | float(0) }}"
+        duration_min: "{{ states('sensor.ev_charging_duration') | float(0) | round(0, 'floor') | int }}"
+        avg_price: "{{ states('sensor.ev_average_charging_price') | float(0) }}"
+        price_unit: "{{ (state_attr('sensor.ev_charging_price', 'unit_of_measurement') or 'EUR/kWh') }}"
+    # Dismiss the persistent charging notification (works on both platforms)
+    - action: "{{ notify_service }}"
+      data:
+        message: "clear_notification"
+        data:
+          tag: ev_charging
+    # Optional summary notification (skipped during quiet hours or no-op sessions)
+    - if:
+        - condition: state
+          entity_id: binary_sensor.ev_quiet_hours_active
+          state: "off"
+        - condition: template
+          value_template: "{{ energy_added > 0 }}"
+      then:
+        - action: "{{ notify_service }}"
+          data:
+            title: "✅ Charging finished"
+            message: |-
+              🔋 Added {{ energy_added | round(1) }} kWh
+              ⏱ Duration {{ duration_min // 60 }}h {{ duration_min % 60 }}m
+              💶 Average charging price {{ avg_price | round(3) }} {{ price_unit }}
+            data:
+              tag: ev_charging_summary
+              channel: "EV Charging"
+    - action: script.ev_log_charging_session
+      data:
+        energy_added: "{{ energy_added }}"
+        duration_minutes: "{{ duration_min }}"
+        avg_price: "{{ avg_price }}"
+
+# ------------------------------------------------------------------
+# Internal: persist session statistics and reset session tracking
+# ------------------------------------------------------------------
+ev_log_charging_session:
+  alias: "EV - Log Charging Session"
+  mode: queued
+  fields:
+    energy_added:
+      description: Energy delivered this session, in kWh.
+      example: 18.4
+    duration_minutes:
+      description: Session duration in minutes.
+      example: 155
+    avg_price:
+      description: Average price paid this session.
+      example: 0.17
+  sequence:
+    - action: input_number.set_value
+      target:
+        entity_id: input_number.ev_lifetime_energy_kwh
+      data:
+        value: "{{ (states('input_number.ev_lifetime_energy_kwh') | float(0)) + (energy_added | float(0)) }}"
+    - action: input_number.set_value
+      target:
+        entity_id: input_number.ev_lifetime_cost
+      data:
+        value: "{{ (states('input_number.ev_lifetime_cost') | float(0)) + ((energy_added | float(0)) * (avg_price | float(0))) }}"
+    - action: input_number.set_value
+      target:
+        entity_id: input_number.ev_lifetime_duration_minutes
+      data:
+        value: "{{ (states('input_number.ev_lifetime_duration_minutes') | float(0)) + (duration_minutes | float(0)) }}"
+    - action: counter.increment
+      target:
+        entity_id: counter.ev_charging_sessions_total
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.ev_last_session_summary
+      data:
+        value: >-
+          {{ (energy_added | float(0)) | round(1) }} kWh · {{ (duration_minutes | int(0)) // 60 }}h {{ (duration_minutes | int(0)) % 60 }}m · {{ (avg_price | float(0)) | round(3) }}/kWh · {{ now().strftime('%H:%M') }}
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.ev_session_tracking
+
+# ------------------------------------------------------------------
+# Dashboard / notification button entry points
+# ------------------------------------------------------------------
+ev_charge_now:
+  alias: "EV - Charge Now"
+  mode: single
+  sequence:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.ev_charge_now_override
+
+ev_stop_charging:
+  alias: "EV - Stop Charging"
+  mode: single
+  sequence:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.ev_stop_charging_requested
+
+ev_enable_smart_charging:
+  alias: "EV - Enable Smart Charging"
+  mode: single
+  sequence:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.ev_follow_price
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.ev_charge_now_override
+
+ev_disable_smart_charging:
+  alias: "EV - Disable Smart Charging"
+  mode: single
+  sequence:
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.ev_follow_price
