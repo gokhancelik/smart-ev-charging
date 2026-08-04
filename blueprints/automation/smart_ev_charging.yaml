@@ -1,0 +1,385 @@
+########################################################################
+# Smart EV Charging — Blueprint Automation
+#
+# Works with ANY EV / charger integration. No entity IDs are hardcoded;
+# everything is provided through the inputs below.
+#
+# Requires the "Smart EV Charging" package (packages/smart_ev_charging.yaml)
+# to be installed, since this blueprint reads/writes its helpers and
+# calls its scripts.
+#
+# Import: Settings > Automations & Scenes > Blueprints > Import Blueprint,
+# then paste the raw GitHub URL of this file, or copy it manually into
+# <config>/blueprints/automation/smart_ev_charging/smart_ev_charging.yaml.
+########################################################################
+blueprint:
+  name: Smart EV Charging
+  description: >
+    Smart, price-aware EV charging for any vehicle/charger. Waits for
+    cheap electricity before charging, sends actionable mobile
+    notifications, and stops automatically when price rises or the
+    target battery level is reached. Requires the companion
+    "Smart EV Charging" package for helpers, sensors, and scripts.
+  domain: automation
+  source_url: https://github.com/gokhancelik/smart-ev-charging/blob/master/blueprints/automation/smart_ev_charging.yaml
+  input:
+    vehicle_connected:
+      name: Vehicle Connected
+      description: Binary sensor that is "on" when the cable is plugged in.
+      selector:
+        entity:
+          domain: binary_sensor
+
+    charging_active:
+      name: Charging Active
+      description: Binary sensor that is "on" while the vehicle is actively drawing power.
+      selector:
+        entity:
+          domain: binary_sensor
+
+    battery_percentage:
+      name: Battery Percentage (optional)
+      description: Sensor reporting the vehicle's state of charge, in percent.
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+
+    charging_power:
+      name: Charging Power (optional)
+      description: Sensor reporting current charging power (e.g. kW).
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+
+    energy_meter:
+      name: Energy Meter (optional)
+      description: Sensor reporting cumulative energy delivered by the charger (kWh).
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+
+    current_price:
+      name: Current Electricity Price
+      description: Sensor reporting the current electricity price.
+      selector:
+        entity:
+          domain: sensor
+
+    cheap_price:
+      name: Cheap Electricity
+      description: Binary sensor that is "on" when electricity is currently considered cheap.
+      selector:
+        entity:
+          domain: binary_sensor
+
+    start_charging_action:
+      name: Start Charging Action
+      description: Action(s) to run to start charging your vehicle.
+      selector:
+        action: {}
+
+    stop_charging_action:
+      name: Stop Charging Action
+      description: Action(s) to run to stop charging your vehicle.
+      selector:
+        action: {}
+
+    notify_service:
+      name: Notify Service
+      description: >
+        Mobile app notify service to use, e.g. "notify.mobile_app_pixel_7".
+        Must support Android and/or iOS actionable notifications.
+      selector:
+        text: {}
+
+    deadline_lead_time_minutes:
+      name: Departure Deadline Lead Time (minutes)
+      description: >
+        If the vehicle is still waiting for a cheap price this many
+        minutes before departure time, charging starts immediately
+        regardless of price.
+      default: 120
+      selector:
+        number:
+          min: 0
+          max: 720
+          step: 5
+          unit_of_measurement: min
+
+variables:
+  vehicle_connected: !input vehicle_connected
+  charging_active: !input charging_active
+  battery_percentage: !input battery_percentage
+  energy_meter: !input energy_meter
+  current_price: !input current_price
+  cheap_price: !input cheap_price
+  notify_service: !input notify_service
+  deadline_lead_time_minutes: !input deadline_lead_time_minutes
+
+triggers:
+  # 1. Cable plugged in
+  - id: connected
+    trigger: state
+    entity_id: !input vehicle_connected
+    to: "on"
+
+  # 2. Cable unplugged
+  - id: disconnected
+    trigger: state
+    entity_id: !input vehicle_connected
+    to: "off"
+
+  # 3. Price becomes cheap
+  - id: price_cheap
+    trigger: state
+    entity_id: !input cheap_price
+    to: "on"
+
+  # 4. Price becomes expensive
+  - id: price_expensive
+    trigger: state
+    entity_id: !input cheap_price
+    to: "off"
+
+  # 5. Charger reports charging has actually started (may be triggered by
+  #    us, or externally e.g. someone plugged in and started manually)
+  - id: charging_started
+    trigger: state
+    entity_id: !input charging_active
+    to: "on"
+
+  # 6. Charger reports charging has actually stopped
+  - id: charging_stopped
+    trigger: state
+    entity_id: !input charging_active
+    to: "off"
+
+  # 7. Battery percentage updates (only relevant if target-% stop enabled)
+  - id: battery_update
+    trigger: state
+    entity_id: !input battery_percentage
+
+  # 8. Periodic check for departure deadline / low battery emergency
+  - id: periodic_check
+    trigger: time_pattern
+    minutes: "/10"
+
+  # 9. Catch up gracefully after a Home Assistant restart
+  - id: ha_restart
+    trigger: homeassistant
+    event: start
+
+conditions: []
+
+actions:
+  - choose:
+      # -----------------------------------------------------------------
+      # Vehicle connected: notify, seed session helpers, check overrides
+      # -----------------------------------------------------------------
+      - conditions:
+          - condition: trigger
+            id: connected
+        sequence:
+          - action: script.ev_notify_plugged_in
+            data:
+              notify_service: "{{ notify_service }}"
+
+      # -----------------------------------------------------------------
+      # Vehicle disconnected: clear session-only override
+      # -----------------------------------------------------------------
+      - conditions:
+          - condition: trigger
+            id: disconnected
+        sequence:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.ev_charge_now_override
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.ev_last_charging_decision
+            data:
+              value: "Vehicle disconnected"
+
+      # -----------------------------------------------------------------
+      # Price became cheap: start charging if conditions are met
+      # -----------------------------------------------------------------
+      - conditions:
+          - condition: trigger
+            id: price_cheap
+          - condition: state
+            entity_id: !input vehicle_connected
+            state: "on"
+          - condition: state
+            entity_id: input_boolean.ev_follow_price
+            state: "on"
+          - condition: state
+            entity_id: !input charging_active
+            state: "off"
+          - condition: template
+            value_template: >-
+              {{ is_state('input_boolean.ev_max_price_enabled', 'off')
+                 or (states(current_price) | float(0)) <= (states('input_number.ev_max_acceptable_price') | float(1000)) }}
+          - condition: template
+            value_template: >-
+              {{ is_state('input_boolean.ev_target_battery_enabled', 'off')
+                 or battery_percentage in ['', none]
+                 or (states(battery_percentage) | float(0)) < (states('input_number.ev_target_battery_percentage') | float(100)) }}
+        sequence:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.ev_last_charging_decision
+            data:
+              value: "Starting: price is cheap ({{ states(current_price) }})"
+          - action: !input start_charging_action
+
+      # -----------------------------------------------------------------
+      # Price became expensive: stop charging if we are the ones charging
+      # -----------------------------------------------------------------
+      - conditions:
+          - condition: trigger
+            id: price_expensive
+          - condition: state
+            entity_id: input_boolean.ev_follow_price
+            state: "on"
+          - condition: state
+            entity_id: input_boolean.ev_charge_now_override
+            state: "off"
+          - condition: state
+            entity_id: !input charging_active
+            state: "on"
+        sequence:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.ev_last_charging_decision
+            data:
+              value: "Stopping: price is no longer cheap ({{ states(current_price) }})"
+          - action: !input stop_charging_action
+
+      # -----------------------------------------------------------------
+      # Charging actually started: seed session data (idempotent) and
+      # send the persistent "charging" notification.
+      # -----------------------------------------------------------------
+      - conditions:
+          - condition: trigger
+            id: charging_started
+        sequence:
+          - action: script.ev_notify_charging_started
+            data:
+              notify_service: "{{ notify_service }}"
+              energy_meter: "{{ energy_meter }}"
+
+      # -----------------------------------------------------------------
+      # Charging actually stopped: dismiss notification, log session
+      # -----------------------------------------------------------------
+      - conditions:
+          - condition: trigger
+            id: charging_stopped
+        sequence:
+          - action: script.ev_notify_charging_finished
+            data:
+              notify_service: "{{ notify_service }}"
+
+      # -----------------------------------------------------------------
+      # Battery reached target while charging: stop
+      # -----------------------------------------------------------------
+      - conditions:
+          - condition: trigger
+            id: battery_update
+          - condition: template
+            value_template: "{{ battery_percentage not in ['', none] }}"
+          - condition: state
+            entity_id: input_boolean.ev_target_battery_enabled
+            state: "on"
+          - condition: state
+            entity_id: !input charging_active
+            state: "on"
+          - condition: template
+            value_template: >-
+              {{ (states(battery_percentage) | float(0)) >= (states('input_number.ev_target_battery_percentage') | float(100)) }}
+        sequence:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.ev_last_charging_decision
+            data:
+              value: "Stopping: target battery percentage reached ({{ states(battery_percentage) }}%)"
+          - action: !input stop_charging_action
+
+      # -----------------------------------------------------------------
+      # Periodic check: low-battery emergency override + departure deadline
+      # -----------------------------------------------------------------
+      - conditions:
+          - condition: trigger
+            id: periodic_check
+          - condition: state
+            entity_id: !input vehicle_connected
+            state: "on"
+          - condition: state
+            entity_id: !input charging_active
+            state: "off"
+        sequence:
+          - choose:
+              # Low battery emergency: bypass smart waiting entirely
+              - conditions:
+                  - condition: state
+                    entity_id: input_boolean.ev_low_battery_emergency_enabled
+                    state: "on"
+                  - condition: template
+                    value_template: "{{ battery_percentage not in ['', none] }}"
+                  - condition: template
+                    value_template: >-
+                      {{ (states(battery_percentage) | float(100)) <= (states('input_number.ev_low_battery_threshold') | float(0)) }}
+                sequence:
+                  - action: input_text.set_value
+                    target:
+                      entity_id: input_text.ev_last_charging_decision
+                    data:
+                      value: "Starting: low battery emergency ({{ states(battery_percentage) }}%)"
+                  - action: !input start_charging_action
+
+              # Departure deadline approaching: force start regardless of price
+              - conditions:
+                  - condition: state
+                    entity_id: input_boolean.ev_follow_price
+                    state: "on"
+                  - condition: template
+                    value_template: >-
+                      {% set dep = states('input_datetime.ev_departure_time') %}
+                      {% if dep in ['unknown', 'unavailable', ''] %}
+                        {{ false }}
+                      {% else %}
+                        {% set today_dep = today_at(dep) %}
+                        {% set next_dep = today_dep if today_dep > now() else today_dep + timedelta(days=1) %}
+                        {% set minutes_left = (next_dep - now()).total_seconds() / 60 %}
+                        {{ minutes_left <= (deadline_lead_time_minutes | float(120)) }}
+                      {% endif %}
+                sequence:
+                  - action: input_text.set_value
+                    target:
+                      entity_id: input_text.ev_last_charging_decision
+                    data:
+                      value: "Starting: departure deadline approaching"
+                  - action: !input start_charging_action
+
+      # -----------------------------------------------------------------
+      # Home Assistant restart: if charging is already active but our
+      # session helpers were never seeded (e.g. HA restarted mid-session),
+      # back-fill them without sending a duplicate notification.
+      # -----------------------------------------------------------------
+      - conditions:
+          - condition: trigger
+            id: ha_restart
+          - condition: state
+            entity_id: !input charging_active
+            state: "on"
+          - condition: template
+            value_template: "{{ states('input_datetime.ev_charge_start_time') in ['unknown', 'unavailable', ''] }}"
+        sequence:
+          - action: script.ev_seed_session_helpers
+            data:
+              energy_meter: "{{ energy_meter }}"
+
+mode: queued
+max: 10
