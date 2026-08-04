@@ -1,0 +1,556 @@
+########################################################################
+# Smart EV Charging — Core Package
+#
+# This package provides all helpers, template sensors, statistics
+# accumulators, and the notification-action listener used by the
+# "Smart EV Charging" blueprint automation.
+#
+# It does NOT reference any real entity IDs directly. Instead, the
+# `input_text` helpers under "Entity configuration" store the entity
+# IDs of *your* vehicle/charger integration. Fill them in once after
+# installation (Settings > Devices & Services > Helpers, or by editing
+# this file) — see README.md "Configuration" for details.
+#
+# Requires in configuration.yaml:
+#   homeassistant:
+#     packages: !include_dir_named packages
+#   script: !include_dir_merge_named scripts
+#
+# All input_* helpers automatically restore their last state across
+# Home Assistant restarts (RestoreEntity), so an in-progress charging
+# session's start time/energy/price survive a restart safely.
+########################################################################
+
+########################################################################
+# ENTITY CONFIGURATION
+# Point these at the real entities exposed by your vehicle/charger
+# integration. Required entities must be set for the package to work;
+# optional ones may be left blank and dependent sensors will simply
+# report "unavailable".
+########################################################################
+input_text:
+  ev_vehicle_connected_entity:
+    name: "EV Config: Vehicle Connected Entity"
+    icon: mdi:power-plug
+    max: 255
+
+  ev_charging_active_entity:
+    name: "EV Config: Charging Active Entity"
+    icon: mdi:battery-charging
+    max: 255
+
+  ev_price_entity:
+    name: "EV Config: Electricity Price Entity"
+    icon: mdi:currency-eur
+    max: 255
+
+  ev_cheap_price_entity:
+    name: "EV Config: Cheap Price Entity"
+    icon: mdi:cash-check
+    max: 255
+
+  ev_battery_entity:
+    name: "EV Config: Battery Percentage Entity (optional)"
+    icon: mdi:battery-high
+    max: 255
+
+  ev_power_entity:
+    name: "EV Config: Charging Power Entity (optional)"
+    icon: mdi:flash
+    max: 255
+
+  ev_energy_entity:
+    name: "EV Config: Energy Meter Entity (optional)"
+    icon: mdi:counter
+    max: 255
+
+  ev_departure_calendar_entity:
+    name: "EV Config: Departure Calendar Entity (optional)"
+    icon: mdi:calendar-clock
+    max: 255
+
+  # --- Debug helpers (see "Debug section" of the dashboard) ---
+  ev_last_notification_action:
+    name: "EV Debug: Last Notification Action"
+    icon: mdi:bell-ring
+    max: 255
+
+  ev_last_charging_decision:
+    name: "EV Debug: Last Charging Decision"
+    icon: mdi:text-box-search
+    max: 255
+
+  ev_last_session_summary:
+    name: "EV Debug: Last Session Summary"
+    icon: mdi:file-document-outline
+    max: 255
+
+########################################################################
+# MODE / FEATURE TOGGLES
+########################################################################
+input_boolean:
+  # Core helper required by spec: "follow_price" — smart charging mode.
+  # ON  = wait for cheap electricity before charging (Smart mode)
+  # OFF = charge immediately whenever plugged in (Manual mode)
+  ev_follow_price:
+    name: "EV Smart Charging Enabled"
+    icon: mdi:transmission-tower
+
+  # Session-only override set by the "Charge now" notification button.
+  # Automatically reset to off the next time the vehicle is unplugged.
+  ev_charge_now_override:
+    name: "EV Charge Now (this session only)"
+    icon: mdi:lightning-bolt
+
+  ev_target_battery_enabled:
+    name: "EV Stop At Target Battery %"
+    icon: mdi:battery-charging-80
+
+  ev_max_price_enabled:
+    name: "EV Enforce Maximum Price"
+    icon: mdi:cash-remove
+
+  ev_quiet_hours_enabled:
+    name: "EV Quiet Hours Enabled"
+    icon: mdi:sleep
+
+  ev_low_battery_emergency_enabled:
+    name: "EV Low Battery Emergency Charging"
+    icon: mdi:battery-alert
+
+  ev_debug_logging:
+    name: "EV Debug Logging"
+    icon: mdi:bug
+
+########################################################################
+# NUMERIC SETTINGS & ACCUMULATORS
+########################################################################
+input_number:
+  # Core helpers required by spec
+  ev_charge_start_energy:
+    name: "EV Charge Start Energy"
+    icon: mdi:counter
+    min: 0
+    max: 1000
+    step: 0.01
+    unit_of_measurement: kWh
+    mode: box
+
+  ev_charge_start_price:
+    name: "EV Charge Start Price"
+    icon: mdi:currency-eur
+    min: -1
+    max: 5
+    step: 0.001
+    mode: box
+
+  # --- Nice-to-have configuration ---
+  ev_target_battery_percentage:
+    name: "EV Target Battery Percentage"
+    icon: mdi:battery-charging-80
+    min: 1
+    max: 100
+    step: 1
+    unit_of_measurement: "%"
+    mode: slider
+    initial: 80
+
+  ev_battery_capacity_kwh:
+    name: "EV Battery Capacity (for cost estimates)"
+    icon: mdi:car-battery
+    min: 0
+    max: 200
+    step: 0.5
+    unit_of_measurement: kWh
+    mode: box
+    initial: 0
+
+  ev_max_acceptable_price:
+    name: "EV Maximum Acceptable Price"
+    icon: mdi:cash-remove
+    min: -1
+    max: 5
+    step: 0.001
+    mode: box
+    initial: 0.30
+
+  ev_low_battery_threshold:
+    name: "EV Low Battery Emergency Threshold"
+    icon: mdi:battery-alert
+    min: 1
+    max: 100
+    step: 1
+    unit_of_measurement: "%"
+    mode: slider
+    initial: 15
+
+  # --- Lifetime statistics accumulators (updated by ev_log_charging_session) ---
+  ev_lifetime_energy_kwh:
+    name: "EV Lifetime Energy (internal)"
+    icon: mdi:counter
+    min: 0
+    max: 1000000
+    step: 0.01
+    unit_of_measurement: kWh
+    mode: box
+    initial: 0
+
+  ev_lifetime_cost:
+    name: "EV Lifetime Cost (internal)"
+    icon: mdi:cash
+    min: 0
+    max: 1000000
+    step: 0.01
+    mode: box
+    initial: 0
+
+  ev_lifetime_duration_minutes:
+    name: "EV Lifetime Charging Duration (internal)"
+    icon: mdi:timer-outline
+    min: 0
+    max: 100000000
+    step: 1
+    unit_of_measurement: min
+    mode: box
+    initial: 0
+
+########################################################################
+# TIME SETTINGS
+########################################################################
+input_datetime:
+  # Core helper required by spec
+  ev_charge_start_time:
+    name: "EV Charge Start Time"
+    icon: mdi:clock-start
+    has_date: true
+    has_time: true
+
+  ev_quiet_hours_start:
+    name: "EV Quiet Hours Start"
+    icon: mdi:clock-time-ten
+    has_date: false
+    has_time: true
+    initial: "22:00:00"
+
+  ev_quiet_hours_end:
+    name: "EV Quiet Hours End"
+    icon: mdi:clock-time-six
+    has_date: false
+    has_time: true
+    initial: "06:00:00"
+
+  ev_departure_time:
+    name: "EV Departure Time"
+    icon: mdi:clock-alert-outline
+    has_date: false
+    has_time: true
+    initial: "07:30:00"
+
+########################################################################
+# SESSION COUNTER
+########################################################################
+counter:
+  ev_charging_sessions_total:
+    name: "EV Charging Sessions Total"
+    icon: mdi:counter
+    initial: 0
+    step: 1
+    restore: true
+
+########################################################################
+# UTILITY METERS — automatically derive today / this week / this month
+# statistics from the lifetime accumulator sensors below. Home Assistant
+# resets these on its own schedule; no automation logic needed.
+########################################################################
+utility_meter:
+  ev_charging_cost_daily:
+    source: sensor.ev_charging_lifetime_cost
+    cycle: daily
+  ev_charging_cost_weekly:
+    source: sensor.ev_charging_lifetime_cost
+    cycle: weekly
+  ev_charging_cost_monthly:
+    source: sensor.ev_charging_lifetime_cost
+    cycle: monthly
+  ev_charging_energy_daily:
+    source: sensor.ev_charging_lifetime_energy
+    cycle: daily
+  ev_charging_energy_weekly:
+    source: sensor.ev_charging_lifetime_energy
+    cycle: weekly
+  ev_charging_energy_monthly:
+    source: sensor.ev_charging_lifetime_energy
+    cycle: monthly
+
+########################################################################
+# TEMPLATE SENSORS
+########################################################################
+template:
+  - sensor:
+      # ---------------------------------------------------------------
+      # Current charging mode: Smart / Manual (session override) / Manual
+      # ---------------------------------------------------------------
+      - name: "EV Charging Mode"
+        unique_id: ev_charging_mode
+        icon: >-
+          {% if is_state('input_boolean.ev_follow_price', 'on') and is_state('input_boolean.ev_charge_now_override', 'off') %}
+            mdi:transmission-tower
+          {% else %}
+            mdi:hand-back-right
+          {% endif %}
+        state: >-
+          {% if is_state('input_boolean.ev_charge_now_override', 'on') %}
+            Manual (session override)
+          {% elif is_state('input_boolean.ev_follow_price', 'on') %}
+            Smart
+          {% else %}
+            Manual
+          {% endif %}
+
+      # ---------------------------------------------------------------
+      # Current charging state: Disconnected / Waiting / Ready / Charging
+      # ---------------------------------------------------------------
+      - name: "EV Charging State"
+        unique_id: ev_charging_state
+        icon: >-
+          {% set active = states('input_text.ev_charging_active_entity') %}
+          {% if active in ['', 'unknown', 'unavailable'] or is_state(active, 'off') %}
+            mdi:power-plug-off
+          {% else %}
+            mdi:battery-charging
+          {% endif %}
+        state: >-
+          {% set connected_ent = states('input_text.ev_vehicle_connected_entity') %}
+          {% set active_ent = states('input_text.ev_charging_active_entity') %}
+          {% set connected = connected_ent not in ['', 'unknown', 'unavailable'] and is_state(connected_ent, 'on') %}
+          {% set charging = active_ent not in ['', 'unknown', 'unavailable'] and is_state(active_ent, 'on') %}
+          {% if not connected %}
+            Disconnected
+          {% elif charging %}
+            Charging
+          {% elif is_state('input_boolean.ev_follow_price', 'on') and is_state('input_boolean.ev_charge_now_override', 'off') %}
+            Waiting for cheap price
+          {% else %}
+            Ready
+          {% endif %}
+
+      # ---------------------------------------------------------------
+      # Current electricity price (passthrough with dynamic unit)
+      # ---------------------------------------------------------------
+      - name: "EV Charging Price"
+        unique_id: ev_charging_price
+        icon: mdi:currency-eur
+        unit_of_measurement: >-
+          {% set ent = states('input_text.ev_price_entity') %}
+          {{ state_attr(ent, 'unit_of_measurement') if ent not in ['', 'unknown', 'unavailable'] else none }}
+        state: >-
+          {% set ent = states('input_text.ev_price_entity') %}
+          {% set val = states(ent) if ent not in ['', 'unknown', 'unavailable'] else 'unknown' %}
+          {{ val if val not in ['unknown', 'unavailable'] else none }}
+        availability: >-
+          {% set ent = states('input_text.ev_price_entity') %}
+          {{ ent not in ['', 'unknown', 'unavailable'] and states(ent) not in ['unknown', 'unavailable'] }}
+
+      # ---------------------------------------------------------------
+      # Charging duration (minutes) — grows while charging is active
+      # ---------------------------------------------------------------
+      - name: "EV Charging Duration"
+        unique_id: ev_charging_duration
+        icon: mdi:timer-outline
+        unit_of_measurement: min
+        device_class: duration
+        state_class: measurement
+        state: >-
+          {% set active_ent = states('input_text.ev_charging_active_entity') %}
+          {% set charging = active_ent not in ['', 'unknown', 'unavailable'] and is_state(active_ent, 'on') %}
+          {% set start = states('input_datetime.ev_charge_start_time') %}
+          {% if charging and start not in ['unknown', 'unavailable', ''] %}
+            {{ ((now() - strptime(start, '%Y-%m-%d %H:%M:%S')).total_seconds() / 60) | round(1) }}
+          {% else %}
+            0
+          {% endif %}
+
+      # ---------------------------------------------------------------
+      # Energy delivered this session (requires optional energy meter)
+      # ---------------------------------------------------------------
+      - name: "EV Charging Session Energy"
+        unique_id: ev_charging_session_energy
+        icon: mdi:lightning-bolt
+        unit_of_measurement: kWh
+        device_class: energy
+        state_class: measurement
+        state: >-
+          {% set ent = states('input_text.ev_energy_entity') %}
+          {% if ent not in ['', 'unknown', 'unavailable'] and states(ent) not in ['unknown', 'unavailable'] %}
+            {{ [0, (states(ent) | float(0)) - (states('input_number.ev_charge_start_energy') | float(0))] | max | round(2) }}
+          {% else %}
+            {{ none }}
+          {% endif %}
+        availability: >-
+          {% set ent = states('input_text.ev_energy_entity') %}
+          {{ ent not in ['', 'unknown', 'unavailable'] and states(ent) not in ['unknown', 'unavailable'] }}
+
+      # ---------------------------------------------------------------
+      # Cost accrued this session (approximation: energy x avg of
+      # start-price and current-price — a true Riemann integral would
+      # need a dedicated integration helper, which is out of scope for
+      # a lightweight package).
+      # ---------------------------------------------------------------
+      - name: "EV Charging Session Cost"
+        unique_id: ev_charging_session_cost
+        icon: mdi:cash
+        device_class: monetary
+        unit_of_measurement: >-
+          {% set ent = states('input_text.ev_price_entity') %}
+          {{ (state_attr(ent, 'unit_of_measurement') or 'EUR/kWh') | replace('/kWh', '') if ent not in ['', 'unknown', 'unavailable'] else 'EUR' }}
+        state: >-
+          {% set energy = states('sensor.ev_charging_session_energy') %}
+          {% if energy not in ['unknown', 'unavailable', 'none', none] %}
+            {% set start_price = states('input_number.ev_charge_start_price') | float(0) %}
+            {% set current_price = states('sensor.ev_charging_price') | float(start_price) %}
+            {{ ((energy | float(0)) * ((start_price + current_price) / 2)) | round(2) }}
+          {% else %}
+            {{ none }}
+          {% endif %}
+        availability: "{{ states('sensor.ev_charging_session_energy') not in ['unknown', 'unavailable', 'none', none] }}"
+
+      # ---------------------------------------------------------------
+      # Average price paid so far this session
+      # ---------------------------------------------------------------
+      - name: "EV Average Charging Price"
+        unique_id: ev_average_charging_price
+        icon: mdi:cash-multiple
+        state: >-
+          {% set energy = states('sensor.ev_charging_session_energy') | float(0) %}
+          {% set cost = states('sensor.ev_charging_session_cost') %}
+          {% if energy > 0 and cost not in ['unknown', 'unavailable', 'none', none] %}
+            {{ ((cost | float(0)) / energy) | round(4) }}
+          {% else %}
+            {{ states('input_number.ev_charge_start_price') }}
+          {% endif %}
+
+      # ---------------------------------------------------------------
+      # Estimated TOTAL session cost (projected to target battery %,
+      # if a battery sensor, capacity and target are all configured)
+      # ---------------------------------------------------------------
+      - name: "EV Estimated Session Cost"
+        unique_id: ev_estimated_session_cost
+        icon: mdi:cash-clock
+        device_class: monetary
+        state: >-
+          {% set battery_ent = states('input_text.ev_battery_entity') %}
+          {% set capacity = states('input_number.ev_battery_capacity_kwh') | float(0) %}
+          {% set target = states('input_number.ev_target_battery_percentage') | float(0) %}
+          {% set session_cost = states('sensor.ev_charging_session_cost') %}
+          {% set avg_price = states('sensor.ev_average_charging_price') | float(0) %}
+          {% if battery_ent not in ['', 'unknown', 'unavailable'] and states(battery_ent) not in ['unknown', 'unavailable'] and capacity > 0 %}
+            {% set current_pct = states(battery_ent) | float(0) %}
+            {% set remaining_kwh = [0, ((target - current_pct) / 100) * capacity] | max %}
+            {{ ((session_cost | float(0)) + (remaining_kwh * avg_price)) | round(2) }}
+          {% else %}
+            {{ session_cost }}
+          {% endif %}
+        availability: "{{ states('sensor.ev_charging_session_cost') not in ['unknown', 'unavailable', 'none', none] }}"
+
+      # ---------------------------------------------------------------
+      # Lifetime accumulators — feed the utility_meter helpers above and
+      # remain compatible with the HA Energy Dashboard.
+      # ---------------------------------------------------------------
+      - name: "EV Lifetime Energy"
+        unique_id: ev_charging_lifetime_energy
+        icon: mdi:counter
+        unit_of_measurement: kWh
+        device_class: energy
+        state_class: total_increasing
+        state: "{{ states('input_number.ev_lifetime_energy_kwh') }}"
+
+      - name: "EV Lifetime Cost"
+        unique_id: ev_charging_lifetime_cost
+        icon: mdi:cash
+        device_class: monetary
+        state_class: total_increasing
+        state: "{{ states('input_number.ev_lifetime_cost') }}"
+
+      - name: "EV Average Session Duration"
+        unique_id: ev_average_session_duration
+        icon: mdi:timer-sand
+        unit_of_measurement: min
+        state: >-
+          {% set sessions = states('counter.ev_charging_sessions_total') | int(0) %}
+          {% if sessions > 0 %}
+            {{ ((states('input_number.ev_lifetime_duration_minutes') | float(0)) / sessions) | round(1) }}
+          {% else %}
+            0
+          {% endif %}
+
+      - name: "EV Average Session Price"
+        unique_id: ev_average_session_price
+        icon: mdi:cash-multiple
+        state: >-
+          {% set energy = states('input_number.ev_lifetime_energy_kwh') | float(0) %}
+          {% if energy > 0 %}
+            {{ ((states('input_number.ev_lifetime_cost') | float(0)) / energy) | round(4) }}
+          {% else %}
+            0
+          {% endif %}
+
+  - binary_sensor:
+      # ---------------------------------------------------------------
+      # Quiet hours window (handles overnight wraparound, e.g. 22:00-06:00)
+      # ---------------------------------------------------------------
+      - name: "EV Quiet Hours Active"
+        unique_id: ev_quiet_hours_active
+        icon: mdi:sleep
+        state: >-
+          {% if is_state('input_boolean.ev_quiet_hours_enabled', 'off') %}
+            {{ false }}
+          {% else %}
+            {% set now_t = now().strftime('%H:%M') %}
+            {% set start = states('input_datetime.ev_quiet_hours_start')[0:5] %}
+            {% set end = states('input_datetime.ev_quiet_hours_end')[0:5] %}
+            {% if start < end %}
+              {{ start <= now_t < end }}
+            {% else %}
+              {{ now_t >= start or now_t < end }}
+            {% endif %}
+          {% endif %}
+
+########################################################################
+# NOTIFICATION ACTION LISTENER
+# Actionable-notification button presses arrive as a
+# `mobile_app_notification_action` event on BOTH Android and iOS.
+# This single automation dispatches them to the relevant script,
+# regardless of which vehicle/blueprint instance sent the notification.
+########################################################################
+automation:
+  - id: ev_smart_charging_notification_actions
+    alias: "EV Smart Charging - Handle Notification Actions"
+    description: >-
+      Listens for the Charge Now / Stop Charging actionable-notification
+      buttons and routes them to the matching script. Safe to trigger in
+      parallel; each script instance handles its own locking.
+    mode: parallel
+    max: 10
+    triggers:
+      - trigger: event
+        event_type: mobile_app_notification_action
+    conditions: []
+    actions:
+      - variables:
+          received_action: "{{ trigger.event.data.action }}"
+      - service: input_text.set_value
+        target:
+          entity_id: input_text.ev_last_notification_action
+        data:
+          value: "{{ received_action }} @ {{ now().strftime('%H:%M:%S') }}"
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ received_action == 'EV_CHARGE_NOW' }}"
+            sequence:
+              - action: script.ev_charge_now
+          - conditions:
+              - condition: template
+                value_template: "{{ received_action == 'EV_STOP_CHARGING' }}"
+            sequence:
+              - action: script.ev_stop_charging

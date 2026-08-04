@@ -1,0 +1,8 @@
+{
+  "name": "Smart EV Charging",
+  "render_readme": true,
+  "content_in_root": false,
+  "filename": "smart_ev_charging.yaml",
+  "homeassistant": "2024.6.0",
+  "country": ["*"]
+}
