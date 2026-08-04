@@ -1,0 +1,269 @@
+########################################################################
+# Smart EV Charging — Native Dashboard
+#
+# Uses only Home Assistant's built-in "Sections" view and native cards
+# (tile, entities, history-graph, markdown) — no HACS frontend cards
+# required. Import via Settings > Dashboards > + Add Dashboard >
+# "New dashboard from YAML", then paste this file, OR add it as a
+# YAML-mode dashboard in configuration.yaml:
+#
+#   lovelace:
+#     dashboards:
+#       smart-ev-charging:
+#         mode: yaml
+#         title: Smart EV Charging
+#         icon: mdi:ev-station
+#         filename: dashboards/dashboard.yaml
+#
+# If the blueprint automation was renamed away from the default
+# "Smart EV Charging", update the single `automation.smart_ev_charging`
+# reference in the "Notification & Automation Status" section below.
+########################################################################
+title: Smart EV Charging
+views:
+  - title: Smart EV Charging
+    path: smart-ev-charging
+    icon: mdi:ev-station
+    type: sections
+    max_columns: 4
+    sections:
+      # ================================================================
+      # OVERVIEW
+      # ================================================================
+      - type: grid
+        cards:
+          - type: heading
+            heading: Overview
+            icon: mdi:view-dashboard
+          - type: tile
+            entity: sensor.ev_battery_percentage
+            name: Battery
+            icon: mdi:battery-high
+          - type: tile
+            entity: sensor.ev_charging_state
+            name: Charging status
+            icon: mdi:battery-charging
+          - type: tile
+            entity: binary_sensor.ev_vehicle_connected
+            name: Plugged in
+            icon: mdi:power-plug
+          - type: tile
+            entity: sensor.ev_charging_price
+            name: Current price
+            icon: mdi:currency-eur
+          - type: tile
+            entity: binary_sensor.ev_price_cheap
+            name: Price status
+            icon: mdi:cash-check
+          - type: tile
+            entity: sensor.ev_charging_mode
+            name: Charging mode
+            icon: mdi:transmission-tower
+          - type: tile
+            entity: sensor.ev_charging_duration
+            name: Duration
+            icon: mdi:timer-outline
+          - type: tile
+            entity: sensor.ev_charging_power
+            name: Power
+            icon: mdi:flash
+          - type: tile
+            entity: sensor.ev_charging_session_energy
+            name: Energy delivered
+            icon: mdi:lightning-bolt
+          - type: tile
+            entity: sensor.ev_charging_session_cost
+            name: Estimated cost
+            icon: mdi:cash
+
+      # ================================================================
+      # SESSION
+      # ================================================================
+      - type: grid
+        cards:
+          - type: heading
+            heading: Session
+            icon: mdi:ev-plug-type2
+          - type: entities
+            title: Current Session
+            entities:
+              - entity: input_datetime.ev_charge_start_time
+                name: Start time
+              - entity: input_number.ev_charge_start_price
+                name: Start price
+              - entity: sensor.ev_charging_price
+                name: Current price
+              - entity: sensor.ev_average_charging_price
+                name: Average price
+              - entity: sensor.ev_charging_session_energy
+                name: Energy added
+              - entity: sensor.ev_charging_session_cost
+                name: Total session cost
+              - entity: sensor.ev_estimated_session_cost
+                name: Estimated total cost
+
+      # ================================================================
+      # CONTROLS — buttons call scripts, never services directly
+      # ================================================================
+      - type: grid
+        cards:
+          - type: heading
+            heading: Controls
+            icon: mdi:tune
+          - type: tile
+            entity: script.ev_charge_now
+            name: Charge now
+            icon: mdi:play-circle
+            color: green
+          - type: tile
+            entity: script.ev_stop_charging
+            name: Stop charging
+            icon: mdi:stop-circle
+            color: red
+          - type: tile
+            entity: script.ev_enable_smart_charging
+            name: Enable Smart Charging
+            icon: mdi:transmission-tower
+            color: blue
+          - type: tile
+            entity: script.ev_disable_smart_charging
+            name: Disable Smart Charging
+            icon: mdi:hand-back-right
+            color: orange
+
+      # ================================================================
+      # GRAPHS
+      # ================================================================
+      - type: grid
+        cards:
+          - type: heading
+            heading: Graphs
+            icon: mdi:chart-line
+          - type: history-graph
+            title: Electricity Price History
+            hours_to_show: 48
+            entities:
+              - entity: sensor.ev_charging_price
+          - type: history-graph
+            title: Charging Power History
+            hours_to_show: 24
+            entities:
+              - entity: sensor.ev_charging_power
+          - type: history-graph
+            title: Battery Percentage History
+            hours_to_show: 48
+            entities:
+              - entity: sensor.ev_battery_percentage
+          - type: history-graph
+            title: Energy Delivered History
+            hours_to_show: 24
+            entities:
+              - entity: sensor.ev_charging_session_energy
+
+      # ================================================================
+      # STATISTICS
+      # ================================================================
+      - type: grid
+        cards:
+          - type: heading
+            heading: Statistics
+            icon: mdi:chart-box
+          - type: tile
+            entity: sensor.ev_charging_cost_daily
+            name: Today's cost
+            icon: mdi:cash
+          - type: tile
+            entity: sensor.ev_charging_cost_weekly
+            name: This week's cost
+            icon: mdi:cash-multiple
+          - type: tile
+            entity: sensor.ev_charging_cost_monthly
+            name: This month's cost
+            icon: mdi:cash-100
+          - type: tile
+            entity: sensor.ev_charging_lifetime_energy
+            name: Total energy charged
+            icon: mdi:counter
+          - type: tile
+            entity: counter.ev_charging_sessions_total
+            name: Number of sessions
+            icon: mdi:counter
+          - type: tile
+            entity: sensor.ev_average_session_price
+            name: Average price
+            icon: mdi:cash-multiple
+          - type: tile
+            entity: sensor.ev_average_session_duration
+            name: Average session duration
+            icon: mdi:timer-sand
+
+      # ================================================================
+      # NOTIFICATION & AUTOMATION STATUS
+      # ================================================================
+      - type: grid
+        cards:
+          - type: heading
+            heading: Notification Status
+            icon: mdi:bell-ring
+          - type: entities
+            entities:
+              - entity: automation.smart_ev_charging
+                name: Automation state
+                secondary_info: last-triggered
+              - entity: input_text.ev_last_notification_action
+                name: Last notification action
+              - entity: input_text.ev_last_session_summary
+                name: Last charging session summary
+
+      # ================================================================
+      # DEBUG (troubleshooting) — configuration, helpers, and sensors
+      # ================================================================
+      - type: grid
+        cards:
+          - type: heading
+            heading: "🐞 Debug"
+            icon: mdi:bug
+          - type: entities
+            title: Entity Configuration
+            entities:
+              - input_text.ev_vehicle_connected_entity
+              - input_text.ev_charging_active_entity
+              - input_text.ev_price_entity
+              - input_text.ev_cheap_price_entity
+              - input_text.ev_battery_entity
+              - input_text.ev_power_entity
+              - input_text.ev_energy_entity
+              - input_text.ev_departure_calendar_entity
+          - type: entities
+            title: Helpers
+            entities:
+              - input_boolean.ev_follow_price
+              - input_boolean.ev_charge_now_override
+              - input_boolean.ev_stop_charging_requested
+              - input_boolean.ev_session_tracking
+              - input_boolean.ev_target_battery_enabled
+              - input_boolean.ev_max_price_enabled
+              - input_boolean.ev_quiet_hours_enabled
+              - input_boolean.ev_low_battery_emergency_enabled
+              - input_boolean.ev_debug_logging
+              - input_datetime.ev_charge_start_time
+              - input_number.ev_charge_start_energy
+              - input_number.ev_charge_start_price
+          - type: entities
+            title: Template Sensors
+            entities:
+              - sensor.ev_charging_mode
+              - sensor.ev_charging_state
+              - sensor.ev_charging_price
+              - sensor.ev_charging_duration
+              - sensor.ev_charging_session_energy
+              - sensor.ev_charging_session_cost
+              - sensor.ev_average_charging_price
+              - sensor.ev_estimated_session_cost
+              - binary_sensor.ev_quiet_hours_active
+              - sensor.ev_smart_charging_version
+          - type: entities
+            title: Last Decision
+            entities:
+              - input_text.ev_last_charging_decision
+              - input_text.ev_last_notification_action

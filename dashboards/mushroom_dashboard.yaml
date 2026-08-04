@@ -1,0 +1,306 @@
+########################################################################
+# Smart EV Charging — Enhanced Dashboard (Mushroom + ApexCharts)
+#
+# Requires the following HACS frontend resources:
+#   - Mushroom (custom:mushroom-*-card)
+#   - apexcharts-card (custom:apexcharts-card)
+#
+# If you don't have these installed, use dashboards/dashboard.yaml
+# instead — it covers the exact same information with native cards.
+#
+# If the blueprint automation was renamed away from the default
+# "Smart EV Charging", update the single `automation.smart_ev_charging`
+# reference in the "Notification Status" section below.
+########################################################################
+title: Smart EV Charging
+views:
+  - title: Smart EV Charging
+    path: smart-ev-charging
+    icon: mdi:ev-station
+    type: sections
+    max_columns: 4
+    sections:
+      # ================================================================
+      # OVERVIEW
+      # ================================================================
+      - type: grid
+        cards:
+          - type: heading
+            heading: Overview
+            icon: mdi:view-dashboard
+          - type: custom:mushroom-chips-card
+            alignment: center
+            chips:
+              - type: entity
+                entity: binary_sensor.ev_vehicle_connected
+                icon_color: green
+              - type: entity
+                entity: binary_sensor.ev_charging_active
+                icon_color: amber
+              - type: entity
+                entity: binary_sensor.ev_price_cheap
+                icon_color: teal
+              - type: entity
+                entity: sensor.ev_charging_mode
+              - type: entity
+                entity: sensor.ev_smart_charging_version
+                icon: mdi:tag-outline
+          - type: custom:mushroom-entity-card
+            entity: sensor.ev_battery_percentage
+            name: Battery
+            icon: mdi:battery-high
+            icon_color: green
+          - type: custom:mushroom-entity-card
+            entity: sensor.ev_charging_state
+            name: Charging status
+            icon: mdi:battery-charging
+          - type: custom:mushroom-entity-card
+            entity: sensor.ev_charging_price
+            name: Current price
+            icon: mdi:currency-eur
+          - type: custom:mushroom-entity-card
+            entity: sensor.ev_charging_duration
+            name: Duration
+            icon: mdi:timer-outline
+          - type: custom:mushroom-entity-card
+            entity: sensor.ev_charging_power
+            name: Power
+            icon: mdi:flash
+            icon_color: amber
+          - type: custom:mushroom-entity-card
+            entity: sensor.ev_charging_session_energy
+            name: Energy delivered
+            icon: mdi:lightning-bolt
+          - type: custom:mushroom-entity-card
+            entity: sensor.ev_charging_session_cost
+            name: Estimated cost
+            icon: mdi:cash
+
+      # ================================================================
+      # SESSION
+      # ================================================================
+      - type: grid
+        cards:
+          - type: heading
+            heading: Session
+            icon: mdi:ev-plug-type2
+          - type: custom:mushroom-template-card
+            primary: Current Session
+            secondary: >-
+              Started {{ as_timestamp(states('input_datetime.ev_charge_start_time')) | timestamp_custom('%H:%M', true) }}
+              at {{ states('input_number.ev_charge_start_price') }} {{ state_attr('sensor.ev_charging_price', 'unit_of_measurement') }}
+            icon: mdi:clock-start
+          - type: entities
+            entities:
+              - entity: sensor.ev_charging_price
+                name: Current price
+              - entity: sensor.ev_average_charging_price
+                name: Average price
+              - entity: sensor.ev_charging_session_energy
+                name: Energy added
+              - entity: sensor.ev_charging_session_cost
+                name: Total session cost
+              - entity: sensor.ev_estimated_session_cost
+                name: Estimated total cost
+
+      # ================================================================
+      # CONTROLS — buttons call scripts, never services directly
+      # ================================================================
+      - type: grid
+        cards:
+          - type: heading
+            heading: Controls
+            icon: mdi:tune
+          - type: custom:mushroom-entity-card
+            entity: script.ev_charge_now
+            name: Charge now
+            icon: mdi:play-circle
+            icon_color: green
+            tap_action:
+              action: perform-action
+              perform_action: script.turn_on
+              target:
+                entity_id: script.ev_charge_now
+          - type: custom:mushroom-entity-card
+            entity: script.ev_stop_charging
+            name: Stop charging
+            icon: mdi:stop-circle
+            icon_color: red
+            tap_action:
+              action: perform-action
+              perform_action: script.turn_on
+              target:
+                entity_id: script.ev_stop_charging
+          - type: custom:mushroom-entity-card
+            entity: script.ev_enable_smart_charging
+            name: Enable Smart Charging
+            icon: mdi:transmission-tower
+            icon_color: blue
+            tap_action:
+              action: perform-action
+              perform_action: script.turn_on
+              target:
+                entity_id: script.ev_enable_smart_charging
+          - type: custom:mushroom-entity-card
+            entity: script.ev_disable_smart_charging
+            name: Disable Smart Charging
+            icon: mdi:hand-back-right
+            icon_color: orange
+            tap_action:
+              action: perform-action
+              perform_action: script.turn_on
+              target:
+                entity_id: script.ev_disable_smart_charging
+
+      # ================================================================
+      # GRAPHS (ApexCharts)
+      # ================================================================
+      - type: grid
+        cards:
+          - type: heading
+            heading: Graphs
+            icon: mdi:chart-line
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: Electricity Price History
+            graph_span: 48h
+            series:
+              - entity: sensor.ev_charging_price
+                name: Price
+                type: line
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: Charging Power History
+            graph_span: 24h
+            series:
+              - entity: sensor.ev_charging_power
+                name: Power
+                type: area
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: Battery Percentage History
+            graph_span: 48h
+            series:
+              - entity: sensor.ev_battery_percentage
+                name: Battery %
+                type: line
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: Energy Delivered History
+            graph_span: 24h
+            series:
+              - entity: sensor.ev_charging_session_energy
+                name: Energy
+                type: area
+
+      # ================================================================
+      # STATISTICS
+      # ================================================================
+      - type: grid
+        cards:
+          - type: heading
+            heading: Statistics
+            icon: mdi:chart-box
+          - type: custom:mushroom-entity-card
+            entity: sensor.ev_charging_cost_daily
+            name: Today's cost
+            icon: mdi:cash
+          - type: custom:mushroom-entity-card
+            entity: sensor.ev_charging_cost_weekly
+            name: This week's cost
+            icon: mdi:cash-multiple
+          - type: custom:mushroom-entity-card
+            entity: sensor.ev_charging_cost_monthly
+            name: This month's cost
+            icon: mdi:cash-100
+          - type: custom:mushroom-entity-card
+            entity: sensor.ev_charging_lifetime_energy
+            name: Total energy charged
+            icon: mdi:counter
+          - type: custom:mushroom-entity-card
+            entity: counter.ev_charging_sessions_total
+            name: Number of sessions
+            icon: mdi:counter
+          - type: custom:mushroom-entity-card
+            entity: sensor.ev_average_session_price
+            name: Average price
+            icon: mdi:cash-multiple
+          - type: custom:mushroom-entity-card
+            entity: sensor.ev_average_session_duration
+            name: Average session duration
+            icon: mdi:timer-sand
+
+      # ================================================================
+      # NOTIFICATION & AUTOMATION STATUS
+      # ================================================================
+      - type: grid
+        cards:
+          - type: heading
+            heading: Notification Status
+            icon: mdi:bell-ring
+          - type: entities
+            entities:
+              - entity: automation.smart_ev_charging
+                name: Automation state
+                secondary_info: last-triggered
+              - entity: input_text.ev_last_notification_action
+                name: Last notification action
+              - entity: input_text.ev_last_session_summary
+                name: Last charging session summary
+
+      # ================================================================
+      # DEBUG (troubleshooting)
+      # ================================================================
+      - type: grid
+        cards:
+          - type: heading
+            heading: "🐞 Debug"
+            icon: mdi:bug
+          - type: entities
+            title: Entity Configuration
+            entities:
+              - input_text.ev_vehicle_connected_entity
+              - input_text.ev_charging_active_entity
+              - input_text.ev_price_entity
+              - input_text.ev_cheap_price_entity
+              - input_text.ev_battery_entity
+              - input_text.ev_power_entity
+              - input_text.ev_energy_entity
+              - input_text.ev_departure_calendar_entity
+          - type: entities
+            title: Helpers
+            entities:
+              - input_boolean.ev_follow_price
+              - input_boolean.ev_charge_now_override
+              - input_boolean.ev_stop_charging_requested
+              - input_boolean.ev_session_tracking
+              - input_boolean.ev_target_battery_enabled
+              - input_boolean.ev_max_price_enabled
+              - input_boolean.ev_quiet_hours_enabled
+              - input_boolean.ev_low_battery_emergency_enabled
+              - input_boolean.ev_debug_logging
+              - input_datetime.ev_charge_start_time
+              - input_number.ev_charge_start_energy
+              - input_number.ev_charge_start_price
+          - type: entities
+            title: Template Sensors
+            entities:
+              - sensor.ev_charging_mode
+              - sensor.ev_charging_state
+              - sensor.ev_charging_price
+              - sensor.ev_charging_duration
+              - sensor.ev_charging_session_energy
+              - sensor.ev_charging_session_cost
+              - sensor.ev_average_charging_price
+              - sensor.ev_estimated_session_cost
+              - binary_sensor.ev_quiet_hours_active
+              - sensor.ev_smart_charging_version
+          - type: entities
+            title: Last Decision
+            entities:
+              - input_text.ev_last_charging_decision
+              - input_text.ev_last_notification_action
