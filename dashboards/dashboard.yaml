@@ -226,14 +226,15 @@ views:
           - type: entities
             title: Entity Configuration
             entities:
-              - input_text.ev_vehicle_connected_entity
-              - input_text.ev_charging_active_entity
-              - input_text.ev_price_entity
-              - input_text.ev_cheap_price_entity
-              - input_text.ev_battery_entity
-              - input_text.ev_power_entity
-              - input_text.ev_energy_entity
-              - input_text.ev_departure_calendar_entity
+              - entity: sensor.ev_smart_charging_config
+                name: Configured entities (see attributes)
+              - binary_sensor.ev_vehicle_connected
+              - binary_sensor.ev_charging_active
+              - binary_sensor.ev_price_cheap
+              - sensor.ev_charging_price
+              - sensor.ev_battery_percentage
+              - sensor.ev_charging_power
+              - sensor.ev_energy_meter
           - type: entities
             title: Helpers
             entities:
