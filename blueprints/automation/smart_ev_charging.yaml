@@ -1,8 +1,21 @@
 ########################################################################
 # Smart EV Charging — Blueprint Automation
 #
-# Works with ANY EV / charger integration. No entity IDs are hardcoded;
-# everything is provided through the inputs below.
+# Requires the companion custom_components/smart_ev_charging integration
+# to be set up first (Settings > Devices & Services > + Add Integration >
+# Smart EV Charging) — that's where you pick your vehicle/charger/price
+# entities, once, through a normal config flow. This blueprint then reads
+# the stable entity IDs the integration exposes
+# (binary_sensor.ev_vehicle_connected, binary_sensor.ev_charging_active,
+# binary_sensor.ev_price_cheap, sensor.ev_charging_price,
+# sensor.ev_battery_percentage, sensor.ev_charging_power,
+# sensor.ev_energy_meter) directly, the same way it already reads the
+# package's own input_boolean/input_number helpers — no per-installation
+# entity selection needed for those.
+#
+# The only things that genuinely differ per installation are how to
+# actually start/stop your charger and which mobile device to notify,
+# which is what the inputs below are for.
 #
 # Requires the "Smart EV Charging" package (packages/smart_ev_charging.yaml)
 # to be installed, since this blueprint reads/writes its helpers and
@@ -18,63 +31,12 @@ blueprint:
     Smart, price-aware EV charging for any vehicle/charger. Waits for
     cheap electricity before charging, sends actionable mobile
     notifications, and stops automatically when price rises or the
-    target battery level is reached. Requires the companion
-    "Smart EV Charging" package for helpers, sensors, and scripts.
+    target battery level is reached. Requires the companion Smart EV
+    Charging integration (entity configuration) and package (helpers,
+    sensors, scripts) to be installed first.
   domain: automation
   source_url: https://github.com/gokhancelik/smart-ev-charging/blob/master/blueprints/automation/smart_ev_charging.yaml
   input:
-    vehicle_connected:
-      name: Vehicle Connected
-      description: Binary sensor that is "on" when the cable is plugged in.
-      selector:
-        entity:
-          domain: binary_sensor
-
-    charging_active:
-      name: Charging Active
-      description: Binary sensor that is "on" while the vehicle is actively drawing power.
-      selector:
-        entity:
-          domain: binary_sensor
-
-    battery_percentage:
-      name: Battery Percentage (optional)
-      description: Sensor reporting the vehicle's state of charge, in percent.
-      default: ""
-      selector:
-        entity:
-          domain: sensor
-
-    charging_power:
-      name: Charging Power (optional)
-      description: Sensor reporting current charging power (e.g. kW).
-      default: ""
-      selector:
-        entity:
-          domain: sensor
-
-    energy_meter:
-      name: Energy Meter (optional)
-      description: Sensor reporting cumulative energy delivered by the charger (kWh).
-      default: ""
-      selector:
-        entity:
-          domain: sensor
-
-    current_price:
-      name: Current Electricity Price
-      description: Sensor reporting the current electricity price.
-      selector:
-        entity:
-          domain: sensor
-
-    cheap_price:
-      name: Cheap Electricity
-      description: Binary sensor that is "on" when electricity is currently considered cheap.
-      selector:
-        entity:
-          domain: binary_sensor
-
     start_charging_action:
       name: Start Charging Action
       description: Action(s) to run to start charging your vehicle.
@@ -110,12 +72,12 @@ blueprint:
           unit_of_measurement: min
 
 variables:
-  vehicle_connected: !input vehicle_connected
-  charging_active: !input charging_active
-  battery_percentage: !input battery_percentage
-  energy_meter: !input energy_meter
-  current_price: !input current_price
-  cheap_price: !input cheap_price
+  vehicle_connected: binary_sensor.ev_vehicle_connected
+  charging_active: binary_sensor.ev_charging_active
+  battery_percentage: sensor.ev_battery_percentage
+  energy_meter: sensor.ev_energy_meter
+  current_price: sensor.ev_charging_price
+  cheap_price: binary_sensor.ev_price_cheap
   notify_service: !input notify_service
   deadline_lead_time_minutes: !input deadline_lead_time_minutes
 
@@ -123,44 +85,44 @@ triggers:
   # 1. Cable plugged in
   - id: connected
     trigger: state
-    entity_id: !input vehicle_connected
+    entity_id: binary_sensor.ev_vehicle_connected
     to: "on"
 
   # 2. Cable unplugged
   - id: disconnected
     trigger: state
-    entity_id: !input vehicle_connected
+    entity_id: binary_sensor.ev_vehicle_connected
     to: "off"
 
   # 3. Price becomes cheap
   - id: price_cheap
     trigger: state
-    entity_id: !input cheap_price
+    entity_id: binary_sensor.ev_price_cheap
     to: "on"
 
   # 4. Price becomes expensive
   - id: price_expensive
     trigger: state
-    entity_id: !input cheap_price
+    entity_id: binary_sensor.ev_price_cheap
     to: "off"
 
   # 5. Charger reports charging has actually started (may be triggered by
   #    us, or externally e.g. someone plugged in and started manually)
   - id: charging_started
     trigger: state
-    entity_id: !input charging_active
+    entity_id: binary_sensor.ev_charging_active
     to: "on"
 
   # 6. Charger reports charging has actually stopped
   - id: charging_stopped
     trigger: state
-    entity_id: !input charging_active
+    entity_id: binary_sensor.ev_charging_active
     to: "off"
 
   # 7. Battery percentage updates (only relevant if target-% stop enabled)
   - id: battery_update
     trigger: state
-    entity_id: !input battery_percentage
+    entity_id: sensor.ev_battery_percentage
 
   # 8. Periodic check for departure deadline / low battery emergency
   - id: periodic_check
@@ -225,13 +187,13 @@ actions:
           - condition: trigger
             id: price_cheap
           - condition: state
-            entity_id: !input vehicle_connected
+            entity_id: binary_sensor.ev_vehicle_connected
             state: "on"
           - condition: state
             entity_id: input_boolean.ev_follow_price
             state: "on"
           - condition: state
-            entity_id: !input charging_active
+            entity_id: binary_sensor.ev_charging_active
             state: "off"
           - condition: template
             value_template: >-
@@ -240,7 +202,7 @@ actions:
           - condition: template
             value_template: >-
               {{ is_state('input_boolean.ev_target_battery_enabled', 'off')
-                 or battery_percentage in ['', none]
+                 or states(battery_percentage) in ['unknown', 'unavailable']
                  or (states(battery_percentage) | float(0)) < (states('input_number.ev_target_battery_percentage') | float(100)) }}
         sequence:
           - action: script.ev_debug_log
@@ -261,7 +223,7 @@ actions:
             entity_id: input_boolean.ev_charge_now_override
             state: "off"
           - condition: state
-            entity_id: !input charging_active
+            entity_id: binary_sensor.ev_charging_active
             state: "on"
         sequence:
           - action: script.ev_debug_log
@@ -280,7 +242,6 @@ actions:
           - action: script.ev_notify_charging_started
             data:
               notify_service: "{{ notify_service }}"
-              energy_meter: "{{ energy_meter }}"
 
       # -----------------------------------------------------------------
       # Charging actually stopped: dismiss notification, log session
@@ -300,12 +261,12 @@ actions:
           - condition: trigger
             id: battery_update
           - condition: template
-            value_template: "{{ battery_percentage not in ['', none] }}"
+            value_template: "{{ states(battery_percentage) not in ['unknown', 'unavailable'] }}"
           - condition: state
             entity_id: input_boolean.ev_target_battery_enabled
             state: "on"
           - condition: state
-            entity_id: !input charging_active
+            entity_id: binary_sensor.ev_charging_active
             state: "on"
           - condition: template
             value_template: >-
@@ -323,10 +284,10 @@ actions:
           - condition: trigger
             id: periodic_check
           - condition: state
-            entity_id: !input vehicle_connected
+            entity_id: binary_sensor.ev_vehicle_connected
             state: "on"
           - condition: state
-            entity_id: !input charging_active
+            entity_id: binary_sensor.ev_charging_active
             state: "off"
         sequence:
           - choose:
@@ -336,7 +297,7 @@ actions:
                     entity_id: input_boolean.ev_low_battery_emergency_enabled
                     state: "on"
                   - condition: template
-                    value_template: "{{ battery_percentage not in ['', none] }}"
+                    value_template: "{{ states(battery_percentage) not in ['unknown', 'unavailable'] }}"
                   - condition: template
                     value_template: >-
                       {{ (states(battery_percentage) | float(100)) <= (states('input_number.ev_low_battery_threshold') | float(0)) }}
@@ -353,8 +314,8 @@ actions:
                     state: "on"
                   - condition: template
                     value_template: >-
-                      {% set cal = states('input_text.ev_departure_calendar_entity') %}
-                      {% if cal not in ['', 'unknown', 'unavailable'] and state_attr(cal, 'start_time') %}
+                      {% set cal = state_attr('sensor.ev_smart_charging_config', 'departure_calendar_entity') %}
+                      {% if cal and state_attr(cal, 'start_time') %}
                         {% set next_dep = strptime(state_attr(cal, 'start_time'), '%Y-%m-%d %H:%M:%S') %}
                         {{ ((next_dep - now()).total_seconds() / 60) <= (deadline_lead_time_minutes | float(120)) }}
                       {% else %}
@@ -381,13 +342,12 @@ actions:
           - condition: trigger
             id: notification_refresh
           - condition: state
-            entity_id: !input charging_active
+            entity_id: binary_sensor.ev_charging_active
             state: "on"
         sequence:
           - action: script.ev_notify_charging_started
             data:
               notify_service: "{{ notify_service }}"
-              energy_meter: "{{ energy_meter }}"
 
       # -----------------------------------------------------------------
       # Manual "Charge now" request: bypass price checks entirely
@@ -396,10 +356,10 @@ actions:
           - condition: trigger
             id: manual_charge_now
           - condition: state
-            entity_id: !input vehicle_connected
+            entity_id: binary_sensor.ev_vehicle_connected
             state: "on"
           - condition: state
-            entity_id: !input charging_active
+            entity_id: binary_sensor.ev_charging_active
             state: "off"
         sequence:
           - action: script.ev_debug_log
@@ -417,7 +377,7 @@ actions:
         sequence:
           - if:
               - condition: state
-                entity_id: !input charging_active
+                entity_id: binary_sensor.ev_charging_active
                 state: "on"
             then:
               - action: script.ev_debug_log
@@ -437,15 +397,13 @@ actions:
           - condition: trigger
             id: ha_restart
           - condition: state
-            entity_id: !input charging_active
+            entity_id: binary_sensor.ev_charging_active
             state: "on"
           - condition: state
             entity_id: input_boolean.ev_session_tracking
             state: "off"
         sequence:
           - action: script.ev_seed_session_helpers
-            data:
-              energy_meter: "{{ energy_meter }}"
 
 mode: queued
 max: 10

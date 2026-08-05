@@ -49,10 +49,6 @@ ev_debug_log:
 ev_seed_session_helpers:
   alias: "EV - Seed Session Helpers"
   mode: single
-  fields:
-    energy_meter:
-      description: Entity ID of the optional energy meter sensor.
-      example: sensor.charger_energy
   sequence:
     - action: input_datetime.set_datetime
       target:
@@ -64,8 +60,7 @@ ev_seed_session_helpers:
         entity_id: input_number.ev_charge_start_energy
       data:
         value: >-
-          {% set ent = energy_meter | default('') %}
-          {{ states(ent) | float(0) if ent not in ['', 'unknown', 'unavailable'] and states(ent) not in ['unknown', 'unavailable'] else 0 }}
+          {{ states('sensor.ev_energy_meter') | float(0) if states('sensor.ev_energy_meter') not in ['unknown', 'unavailable'] else 0 }}
     - action: input_number.set_value
       target:
         entity_id: input_number.ev_charge_start_price
@@ -131,9 +126,6 @@ ev_notify_charging_started:
     notify_service:
       description: Notify service to send to.
       example: notify.mobile_app_pixel_7
-    energy_meter:
-      description: Entity ID of the optional energy meter sensor.
-      example: sensor.charger_energy
   sequence:
     - if:
         - condition: state
@@ -141,18 +133,14 @@ ev_notify_charging_started:
           state: "off"
       then:
         - action: script.ev_seed_session_helpers
-          data:
-            energy_meter: "{{ energy_meter }}"
     - variables:
-        battery: "{{ states('input_text.ev_battery_entity') }}"
-        power: "{{ states('input_text.ev_power_entity') }}"
         duration_min: "{{ states('sensor.ev_charging_duration') | float(0) | round(0, 'floor') | int }}"
         message: |-
-          🔋 Battery: {{ (states(battery) + '%') if battery not in ['', 'unknown', 'unavailable'] and states(battery) not in ['unknown', 'unavailable'] else 'n/a' }}
+          🔋 Battery: {{ (states('sensor.ev_battery_percentage') + '%') if states('sensor.ev_battery_percentage') not in ['unknown', 'unavailable'] else 'n/a' }}
           💶 Price: {{ states('sensor.ev_charging_price') }} {{ state_attr('sensor.ev_charging_price', 'unit_of_measurement') or '' }}
           🕒 Started: {{ as_timestamp(states('input_datetime.ev_charge_start_time')) | timestamp_custom('%H:%M', true) }}
           ⏱ Duration: {{ '%02d:%02d' | format(duration_min // 60, duration_min % 60) }}
-          ⚡ Power: {{ (states(power) + ' kW') if power not in ['', 'unknown', 'unavailable'] and states(power) not in ['unknown', 'unavailable'] else 'n/a' }}
+          ⚡ Power: {{ (states('sensor.ev_charging_power') + ' kW') if states('sensor.ev_charging_power') not in ['unknown', 'unavailable'] else 'n/a' }}
           🔌 Energy added: {{ states('sensor.ev_charging_session_energy') if states('sensor.ev_charging_session_energy') not in ['unknown', 'unavailable', 'none', none] else 'n/a' }} kWh
     - action: "{{ notify_service }}"
       data:
