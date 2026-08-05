@@ -345,11 +345,14 @@ The dashboard is opt-in but automatic: **Settings > Devices & Services >
 Smart EV Charging > ⋮ > Options > Install or update the dashboard**. This
 registers the bundled native dashboard as a sidebar tab and refreshes it on
 each Home Assistant start (as long as it stays installed). Installing it is
-safe — it uses the same storage-mode Lovelace registration the blueprints
-and `frontend` component use for native dashboards, so it never touches
-your other dashboards' data. Blueprints are different — they're just
-files Home Assistant reads from disk, so they install the moment the file
-lands in the blueprints directory.
+safe — it uses the same storage-mode Lovelace registration the `frontend`
+component uses for built-in dashboards, so it never touches your other
+dashboards' data. The same actions are available as the
+`smart_ev_charging.install_dashboard` and
+`smart_ev_charging.uninstall_dashboard` services (e.g. from an automation
+or the developer tools). Blueprints are different — they're just files
+Home Assistant reads from disk, so they install the moment the file lands
+in the blueprints directory.
 
 ---
 
