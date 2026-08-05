@@ -98,9 +98,23 @@ Five pieces cooperate and none is self-sufficient:
    `async_setup_entry`, it copies the bundled
    `custom_components/smart_ev_charging/blueprint/smart_ev_charging.yaml`
    and `custom_components/smart_ev_charging/dashboards/dashboard.yaml`
-   into the user's `<config>/blueprints/.../` and `<config>/dashboards/`
-   (only if the destination doesn't already exist — never overwrites),
-   then posts one `persistent_notification` summarizing what was
+   into the user's `<config>/blueprints/.../` and `<config>/dashboards/`.
+   The two use *different* overwrite policies, deliberately — see
+   `_install_bundled_assets`'s docstring: the blueprint is re-synced
+   (overwritten) whenever its bundled content differs from what's on
+   disk, on every setup/restart, because that's the only way a blueprint
+   bugfix in a new release reaches someone who already installed an
+   earlier version — blueprints are customized via the automation's
+   inputs, not by hand-editing the blueprint file. The dashboard is
+   written once and never touched again, since dashboards are commonly
+   hand-customized after import and overwriting would destroy that. Don't
+   change the blueprint to "only if missing" — that was the actual bug
+   that shipped in 1.3.0 (an `action` selector input spliced under an
+   `action:` key instead of as a bare sequence item, caught by a user
+   error report, fixed in 1.3.1) and had no way to reach existing
+   installs until this sync-on-diff behavior was added.
+   `_async_notify_setup_complete` then posts one `persistent_notification`
+   summarizing what was
    installed and what's still manual. It owns zero charging *decision*
    logic — that's the package/blueprint's job.
 2. **`packages/smart_ev_charging.yaml`** — `input_boolean` / `input_number`
@@ -131,6 +145,16 @@ Five pieces cooperate and none is self-sufficient:
    integration exists to remove. Uses trigger IDs + `choose:` blocks,
    `mode: queued` to serialize concurrent trigger firings and avoid race
    conditions.
+
+   `start_charging_action`/`stop_charging_action` use `selector: {action: {}}`,
+   which resolves to a **list** of action steps, not a service-name
+   string — splice it into a sequence as a bare item (`- !input
+   start_charging_action`), never nest it under an `action:` key (`-
+   action: !input start_charging_action` fails at automation-creation
+   time with "value should be a string for dictionary value", since HA
+   then tries to put a list where a string belongs). This shipped broken
+   in 1.3.0 and was fixed in 1.3.1 — if you ever add another
+   `action`-selector input, use the same bare-item pattern.
 4. **`scripts/smart_ev_charging_scripts.yaml`** — all reusable logic
    (notification building, session bookkeeping, dashboard button targets).
    Flat mapping of `script_id: {...}`, merged in via

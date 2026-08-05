@@ -6,7 +6,7 @@ level is reached. Works with *any* EV/charger integration — you point it at
 your existing vehicle/charger/price entities once, through a normal
 Home Assistant config flow; a package and blueprint do the rest.
 
-![version](https://img.shields.io/badge/version-1.3.0-blue)
+![version](https://img.shields.io/badge/version-1.3.1-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ---
@@ -355,7 +355,8 @@ they're just files Home Assistant reads from disk, so copying the file
 | Symptom | Likely cause |
 |---|---|
 | "Smart EV Charging" doesn't appear in + Add Integration | `custom_components/smart_ev_charging/` is missing or HA wasn't restarted after install |
-| Blueprint not listed under Settings > Blueprints after adding the integration | Check the "Smart EV Charging: setup" notification confirmed it was installed; if the destination file already existed from a previous install, it's intentionally left untouched — verify `blueprints/automation/smart_ev_charging/smart_ev_charging.yaml` directly |
+| Blueprint not listed under Settings > Blueprints after adding the integration | Check the "Smart EV Charging: setup" notification confirmed it was synced; verify `blueprints/automation/smart_ev_charging/smart_ev_charging.yaml` directly |
+| Creating the automation from the blueprint fails with "Message malformed: value should be a string for dictionary value @ ...['action']" | You have a pre-1.3.1 copy of the blueprint. Restart Home Assistant once (the integration re-syncs the blueprint file on every restart, unlike the dashboard) or delete `blueprints/automation/smart_ev_charging/smart_ev_charging.yaml` and restart to force a fresh copy |
 | Helpers/sensors from the package don't exist | `configuration.yaml` is missing the `packages:` include, or HA wasn't restarted |
 | Scripts fail with "not found" | `configuration.yaml` is missing the `script: !include_dir_merge_named scripts` include |
 | `sensor.ev_battery_percentage` / `sensor.ev_charging_power` / `sensor.ev_energy_meter` don't exist | That field was left empty in the integration's config flow — expected, it's optional |

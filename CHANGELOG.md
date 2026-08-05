@@ -5,6 +5,24 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.1] - 2026-08-05
+
+### Fixed
+
+- The blueprint's `start_charging_action`/`stop_charging_action` steps
+  were written as `- action: !input start_charging_action`, but an
+  `action`-selector input resolves to a *list* of action steps, not a
+  service-name string — this made "Create Automation" from the blueprint
+  fail with `Message malformed: value should be a string for dictionary
+  value @ ...['action']`. Fixed to splice the input in as a bare sequence
+  item (`- !input start_charging_action`) everywhere it's used.
+- The integration's auto-install now re-syncs the blueprint file on every
+  setup/restart whenever its bundled content differs from what's on disk
+  (previously "only if missing," like the dashboard) — otherwise a fix
+  like this one would never reach anyone who'd already installed the
+  broken 1.3.0 blueprint. The dashboard keeps the old, install-once
+  behavior, since dashboards are commonly hand-customized after import.
+
 ## [1.3.0] - 2026-08-05
 
 ### Added

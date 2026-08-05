@@ -38,11 +38,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    blueprint_installed, dashboard_installed = await hass.async_add_executor_job(
+    blueprint_synced, dashboard_installed = await hass.async_add_executor_job(
         _install_bundled_assets, hass
     )
-    if blueprint_installed or dashboard_installed:
-        await _async_notify_setup_complete(hass, blueprint_installed, dashboard_installed)
+    if blueprint_synced or dashboard_installed:
+        await _async_notify_setup_complete(hass, blueprint_synced, dashboard_installed)
 
     return True
 
@@ -56,20 +56,40 @@ async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 
 def _install_bundled_assets(hass: HomeAssistant) -> tuple[bool, bool]:
-    """Copy the bundled blueprint/dashboard into the config dir if missing.
+    """Install the bundled blueprint/dashboard into the config dir.
 
-    Runs in the executor (blocking file I/O). Never overwrites an
-    existing file, so a user's own edits (or a deliberate removal) are
-    left alone on subsequent restarts. Returns (blueprint_installed,
-    dashboard_installed) — True only for files actually written just now.
+    Runs in the executor (blocking file I/O). Two different policies:
+
+    - The blueprint is kept in sync on every setup/restart (overwritten
+      whenever its content differs from the bundled copy). Blueprints are
+      templates you customize by changing the *automation's* inputs, not
+      by hand-editing the blueprint file, so re-syncing it is how bugfixes
+      actually reach an already-installed automation. Without this, a
+      fixed blueprint shipped in a new release would never reach anyone
+      who installed an earlier, broken version.
+    - The dashboard is written once and never touched again — dashboards
+      are commonly hand-customized (card layout, added sections) after
+      import, and overwriting that would destroy real user work.
+
+    Returns (blueprint_synced, dashboard_installed) — True only when this
+    call actually wrote something.
     """
-    blueprint_installed = _copy_if_missing(
-        hass, _BLUEPRINT_SOURCE, _BLUEPRINT_DEST_PARTS
-    )
+    blueprint_synced = _sync_file(hass, _BLUEPRINT_SOURCE, _BLUEPRINT_DEST_PARTS)
     dashboard_installed = _copy_if_missing(
         hass, _DASHBOARD_SOURCE, _DASHBOARD_DEST_PARTS
     )
-    return blueprint_installed, dashboard_installed
+    return blueprint_synced, dashboard_installed
+
+
+def _sync_file(hass: HomeAssistant, source: Path, dest_parts: tuple[str, ...]) -> bool:
+    """Write source to dest whenever their contents differ. Returns True if written."""
+    dest = Path(hass.config.path(*dest_parts))
+    if dest.exists() and dest.read_bytes() == source.read_bytes():
+        return False
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, dest)
+    _LOGGER.info("Smart EV Charging: synced %s", dest)
+    return True
 
 
 def _copy_if_missing(
@@ -85,14 +105,15 @@ def _copy_if_missing(
 
 
 async def _async_notify_setup_complete(
-    hass: HomeAssistant, blueprint_installed: bool, dashboard_installed: bool
+    hass: HomeAssistant, blueprint_synced: bool, dashboard_installed: bool
 ) -> None:
     lines = ["Smart EV Charging installed what it safely can on its own:", ""]
-    if blueprint_installed:
+    if blueprint_synced:
         lines.append(
-            "- ✅ Blueprint copied to `blueprints/automation/smart_ev_charging/` "
+            "- ✅ Blueprint synced to `blueprints/automation/smart_ev_charging/` "
             "— go to **Settings > Automations & Scenes > Blueprints** to create "
-            "the automation from it."
+            "the automation from it. Already have one? Restart Home Assistant "
+            "(or reload Automations) to pick up this update."
         )
     if dashboard_installed:
         lines.append(
