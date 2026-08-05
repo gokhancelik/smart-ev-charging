@@ -5,6 +5,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-08-05
+
+### Added
+
+- "Vehicle connected" and "Charging active" now accept a text/enum status
+  sensor (e.g. Easee's charger status, which reports `Charging`,
+  `Completed`, `Car disconnected`, etc. instead of a boolean) in addition
+  to a proper `binary_sensor`. Two new optional config flow fields,
+  `vehicle_connected_states` and `charging_active_states`, take a
+  comma-separated list of which raw state values count as "on" for that
+  concept. Leaving them empty preserves the previous plain on/off
+  behavior for binary_sensor sources — fully backward compatible.
+- Tooltips (`data_description`) added to every config/options flow field,
+  explaining what it's for and how it affects charging behavior.
+
 ## [1.0.0] - 2026-08-05
 
 ### Added

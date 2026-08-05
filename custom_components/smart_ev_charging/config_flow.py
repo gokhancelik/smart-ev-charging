@@ -8,6 +8,12 @@ entities through a normal HA form, and expose them under stable,
 well-known entity IDs (sensor.ev_charging_price, binary_sensor.ev_vehicle_connected,
 etc.) that the package's templates, the scripts, and the dashboards rely on.
 
+vehicle_connected and charging_active accept either a proper binary_sensor
+(the common case) or a text/enum status sensor (e.g. Easee's charger
+status, which reports strings like "Charging", "Completed", "Car
+disconnected" instead of a boolean) paired with a "which states count as
+on" list — see vehicle_connected_states / charging_active_states.
+
 Single-vehicle by design, matching the rest of the package (see README FAQ):
 only one config entry is allowed.
 """
@@ -23,40 +29,53 @@ from homeassistant.helpers import selector
 from .const import (
     CONF_BATTERY,
     CONF_CHARGING_ACTIVE,
+    CONF_CHARGING_ACTIVE_STATES,
     CONF_CHEAP_PRICE,
     CONF_DEPARTURE_CALENDAR,
     CONF_ENERGY,
     CONF_POWER,
     CONF_PRICE,
     CONF_VEHICLE_CONNECTED,
+    CONF_VEHICLE_CONNECTED_STATES,
     DOMAIN,
 )
 
 
-def _entity_selector(domain: str) -> selector.Selector:
+def _entity_selector(domain: str | list[str]) -> selector.Selector:
     return selector.selector({"entity": {"domain": domain}})
+
+
+def _text_selector() -> selector.Selector:
+    return selector.selector({"text": {}})
 
 
 def _build_schema(current: dict) -> vol.Schema:
     fields: dict = {}
 
-    def required(key: str, domain: str) -> None:
+    def required_entity(key: str, domain: str | list[str]) -> None:
         kwargs = {"default": current[key]} if current.get(key) else {}
         fields[vol.Required(key, **kwargs)] = _entity_selector(domain)
 
-    def optional(key: str, domain: str) -> None:
+    def optional_entity(key: str, domain: str | list[str]) -> None:
         fields[
             vol.Optional(key, description={"suggested_value": current.get(key)})
         ] = _entity_selector(domain)
 
-    required(CONF_VEHICLE_CONNECTED, "binary_sensor")
-    required(CONF_CHARGING_ACTIVE, "binary_sensor")
-    required(CONF_PRICE, "sensor")
-    required(CONF_CHEAP_PRICE, "binary_sensor")
-    optional(CONF_BATTERY, "sensor")
-    optional(CONF_POWER, "sensor")
-    optional(CONF_ENERGY, "sensor")
-    optional(CONF_DEPARTURE_CALENDAR, "calendar")
+    def optional_text(key: str) -> None:
+        fields[
+            vol.Optional(key, description={"suggested_value": current.get(key)})
+        ] = _text_selector()
+
+    required_entity(CONF_VEHICLE_CONNECTED, ["binary_sensor", "sensor"])
+    optional_text(CONF_VEHICLE_CONNECTED_STATES)
+    required_entity(CONF_CHARGING_ACTIVE, ["binary_sensor", "sensor"])
+    optional_text(CONF_CHARGING_ACTIVE_STATES)
+    required_entity(CONF_PRICE, "sensor")
+    required_entity(CONF_CHEAP_PRICE, "binary_sensor")
+    optional_entity(CONF_BATTERY, "sensor")
+    optional_entity(CONF_POWER, "sensor")
+    optional_entity(CONF_ENERGY, "sensor")
+    optional_entity(CONF_DEPARTURE_CALENDAR, "calendar")
 
     return vol.Schema(fields)
 

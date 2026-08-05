@@ -6,7 +6,7 @@ level is reached. Works with *any* EV/charger integration — you point it at
 your existing vehicle/charger/price entities once, through a normal
 Home Assistant config flow; a package and blueprint do the rest.
 
-![version](https://img.shields.io/badge/version-1.0.0-blue)
+![version](https://img.shields.io/badge/version-1.1.0-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ---
@@ -122,7 +122,9 @@ Tibber, …):
 | Field | Required | Example |
 |---|---|---|
 | Vehicle connected | ✅ | `binary_sensor.charger_cable_connected` |
+| Vehicle connected — matching states | optional | `Charging, Completed, Awaiting Start` |
 | Charging active | ✅ | `binary_sensor.charger_charging` |
+| Charging active — matching states | optional | `Charging` |
 | Current electricity price | ✅ | `sensor.nordpool_kwh_price` |
 | Cheap electricity | ✅ | `binary_sensor.price_is_cheap` |
 | Battery percentage | optional | `sensor.car_battery_level` |
@@ -136,6 +138,22 @@ package only *reacts* to it. Only one instance of the integration is
 allowed (single-vehicle for now — see [FAQ](#faq)). To change any of
 these entities later, open the integration's **Configure** option instead
 of re-adding it.
+
+**Chargers without separate connected/charging binary sensors** (Easee,
+some OCPP/go-eCharger/Wallbox setups) commonly expose a single text status
+sensor instead — e.g. Easee's charger status reports `Charging`,
+`Completed`, `Car disconnected`, `Awaiting Start`, etc. Point "Vehicle
+connected" and "Charging active" at that same status sensor, then fill in
+the matching "matching states" field with a comma-separated list of which
+raw values count as on for that concept:
+
+- Vehicle connected — matching states: `Charging, Completed, Awaiting Start, Ready to Charge`
+  (anything that isn't `Car disconnected`/`Disconnected`)
+- Charging active — matching states: `Charging`
+
+Leave both "matching states" fields empty if your source is a real
+binary_sensor — the integration then falls back to plain on/off, unchanged
+from before.
 
 The integration exposes what you picked under stable entity IDs
 (`binary_sensor.ev_vehicle_connected`, `binary_sensor.ev_charging_active`,
@@ -197,7 +215,9 @@ Any integration that exposes the entities below works — the integration's
 config flow and the package never assume a specific brand:
 
 - **Charger / EV state**: Easee, OCPP, Zaptec, go-eCharger, Tesla, Wallbox,
-  or a plain `binary_sensor`/`switch` you template yourself
+  or a plain `binary_sensor`/`switch` you template yourself. Both proper
+  binary sensors and single text-status sensors (Easee-style) are
+  supported natively — see [Configuration](#configuration).
 - **Electricity price**: Nordpool, Tibber, ENTSO-E, Energi Data Service, or
   a custom template sensor
 - **Notifications**: the official Home Assistant Companion App on Android

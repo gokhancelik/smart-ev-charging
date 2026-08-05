@@ -7,7 +7,9 @@ DOMAIN = "smart_ev_charging"
 PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR]
 
 CONF_VEHICLE_CONNECTED = "vehicle_connected"
+CONF_VEHICLE_CONNECTED_STATES = "vehicle_connected_states"
 CONF_CHARGING_ACTIVE = "charging_active"
+CONF_CHARGING_ACTIVE_STATES = "charging_active_states"
 CONF_PRICE = "price"
 CONF_CHEAP_PRICE = "cheap_price"
 CONF_BATTERY = "battery"
