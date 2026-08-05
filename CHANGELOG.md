@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.1] - 2026-08-05
+
+### Added
+
+- README: FAQ entry and Troubleshooting row for status-sensor chargers
+  (matching-states misconfiguration).
+- `AGENTS.md`: process checklist for AI coding agents working in this
+  repo — every user-facing change must update `README.md` and ship a
+  version bump + git tag + GitHub release, proactively, not only when
+  asked. `CLAUDE.md`'s versioning section now points to it instead of
+  duplicating it.
+
 ## [1.1.0] - 2026-08-05
 
 ### Added

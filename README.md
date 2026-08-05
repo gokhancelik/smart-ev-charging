@@ -6,7 +6,7 @@ level is reached. Works with *any* EV/charger integration — you point it at
 your existing vehicle/charger/price entities once, through a normal
 Home Assistant config flow; a package and blueprint do the rest.
 
-![version](https://img.shields.io/badge/version-1.1.0-blue)
+![version](https://img.shields.io/badge/version-1.1.1-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ---
@@ -287,6 +287,13 @@ sensor to a threshold, and point the integration's "Cheap electricity"
 field at it (Settings > Devices & Services > Smart EV Charging >
 Configure).
 
+**My charger (e.g. Easee) only exposes one status sensor, not separate
+"connected"/"charging" binary sensors — do I need to write a template?**
+No. Point "Vehicle connected" and "Charging active" at that same status
+sensor and fill in the matching "matching states" field (comma-separated
+raw values that count as on for that concept) — see
+[Configuration](#configuration). No template YAML needed.
+
 **What happens if Home Assistant restarts mid-charge?**
 All helpers restore their last state automatically. If charging was
 already active before the restart, the blueprint backfills session
@@ -307,6 +314,7 @@ you unplug.
 | Scripts fail with "not found" | `configuration.yaml` is missing the `script: !include_dir_merge_named scripts` include |
 | `sensor.ev_battery_percentage` / `sensor.ev_charging_power` / `sensor.ev_energy_meter` don't exist | That field was left empty in the integration's config flow — expected, it's optional |
 | `binary_sensor.ev_vehicle_connected` etc. show "unavailable" | The source entity picked in the integration's config flow is itself unavailable — check it directly |
+| `binary_sensor.ev_vehicle_connected`/`ev_charging_active` never turn on, even though the source status sensor changes | The "matching states" field doesn't match your source sensor's actual values — open the source entity's state history and copy the exact text (matching is case-insensitive, but must otherwise match exactly) |
 | Notifications never arrive | Check `notify_service` in the blueprint matches Settings > Devices & Services > your mobile device exactly (`notify.mobile_app_...`) |
 | "Charge now"/"Stop charging" notification buttons do nothing | Confirm the Companion App has notification permissions and background access; check `input_text.ev_last_notification_action` in the Debug dashboard section to see if the event even arrived |
 | Dashboard shows "entity not found" for `automation.smart_ev_charging` | You renamed the automation created from the blueprint — update that one reference in the dashboard YAML |

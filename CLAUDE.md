@@ -204,13 +204,9 @@ point.
 
 ## Versioning and releases
 
-Version is tracked in three places that must move together: `CHANGELOG.md`,
-the hardcoded `sensor.ev_smart_charging_version` state in
-`packages/smart_ev_charging.yaml`, and `custom_components/smart_ev_charging/manifest.json`'s
-`version` field (this is the one HACS actually reads for the Integration
-category — keep `hacs.json` and the manifest from disagreeing). HACS
-resolves installable versions from GitHub releases (falls back to the
-default branch if none exist), so a version bump is: update `CHANGELOG.md`,
-the version sensor, and `manifest.json`, commit, then
-`git tag -a vX.Y.Z -m "..."`, `git push origin vX.Y.Z`, and
-`gh release create vX.Y.Z --title vX.Y.Z --notes "..."`.
+See `AGENTS.md`'s release checklist — it is the authoritative, step-by-step
+process (README updates, the four places version must move together
+consistently, then tag + GitHub release) and applies regardless of which
+agent or tool is making the change. Follow it for every user-facing
+change without waiting to be asked; HACS installs from tags/releases, not
+raw commits, so an untagged change is invisible to users.
