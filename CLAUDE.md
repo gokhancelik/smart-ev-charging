@@ -4,14 +4,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Home Assistant **package** (YAML, no Python/custom component) that adds
-price-aware smart EV charging: wait for cheap electricity, charge, stop when
-price rises or a target battery % is reached, with actionable Android/iOS
-mobile notifications. Distributed as a HACS "Package" category repo. There
-is no build system, no tests, no runtime here — this repo *is* the
-configuration that Home Assistant loads directly. "Development" means
-authoring/editing YAML and validating it parses and is internally
-consistent.
+A Home Assistant add-on for price-aware smart EV charging: wait for cheap
+electricity, charge, stop when price rises or a target battery % is
+reached, with actionable Android/iOS mobile notifications. It's a hybrid
+repo: a real Python integration (`custom_components/smart_ev_charging/`,
+HACS category **Integration**) that owns entity configuration via a config
+flow, plus a Home Assistant **package** (YAML) that owns all the derived
+sensors, statistics, and helpers, plus a **blueprint** that owns the
+plug/price decision logic. There is no build system and no automated test
+suite — "development" means authoring/editing Python and YAML and
+validating each parses and is internally consistent (see "Validating
+changes" below); the Python side has never been exercised against a
+running Home Assistant instance (no `homeassistant` package available in
+this environment — see the Integration section below).
+
+HACS's "Package" category (what v1.0.0 shipped as) was removed from HACS
+entirely, which is *why* the integration exists — see `CHANGELOG.md`'s
+2.0.0 entry and README's "Upgrading from 1.x" before assuming the old
+all-YAML, no-Python design is still current.
 
 `ev_charging_hacs_package.md` is the original spec this project was built
 from — consult it to check a proposed change against the original intent
@@ -45,58 +55,88 @@ tags before loading (see git history for the exact snippet), then confirm
 `blueprint.input`, `triggers`, and `actions[0].choose` come out with the
 expected keys/counts.
 
+For `custom_components/smart_ev_charging/*.py`, at minimum
+`python -m py_compile custom_components/smart_ev_charging/*.py` to catch
+syntax errors, and `json.load()` each `.json` file. There is no
+`homeassistant` package installed in this environment, so imports from
+`homeassistant.*` cannot be resolved or type-checked here — API misuse
+(wrong signatures, renamed helpers, etc.) will not be caught until someone
+runs this against a real Home Assistant instance. Flag this limitation
+rather than claiming the integration is verified.
+
 There's no automated test suite. When making entity-touching changes,
 manually trace call sites across files (see "Entity naming and cross-file
 coupling" below) — that coupling is the main source of bugs in this repo,
-not YAML syntax.
+not syntax.
 
 ## Architecture
 
-Four files cooperate and none of them is self-sufficient:
+Five pieces cooperate and none is self-sufficient:
 
-1. **`packages/smart_ev_charging.yaml`** — the only file HACS actually
-   auto-installs (per `hacs.json`'s `filename`). Defines all `input_text`
-   / `input_boolean` / `input_number` / `input_datetime` helpers, `counter`,
-   `utility_meter`, `template:` sensors/binary_sensors, and one static
-   automation (`ev_smart_charging_notification_actions`) that listens for
-   `mobile_app_notification_action` events and dispatches to scripts.
-2. **`blueprints/automation/smart_ev_charging.yaml`** — the actual
-   plug/price/charging state machine. User-instantiated per vehicle via the
-   HA UI, with entity/action selectors (`!input ...`) so no real entity ID
-   is ever hardcoded here. Uses trigger IDs + `choose:` blocks, `mode: queued`
-   to serialize concurrent trigger firings and avoid race conditions.
-3. **`scripts/smart_ev_charging_scripts.yaml`** — all reusable logic
+1. **`custom_components/smart_ev_charging/`** — the only piece HACS
+   auto-installs (Integration category; version comes from its
+   `manifest.json`, not `hacs.json`). Owns entity *configuration* only:
+   `config_flow.py` collects the user's vehicle/charger/price entities
+   (required: vehicle_connected, charging_active, price, cheap_price;
+   optional: battery, power, energy, departure_calendar) through a config
+   entry + options flow, single-instance-only. `sensor.py`/`binary_sensor.py`
+   mirror those chosen entities' state onto fixed, well-known entity IDs
+   (`binary_sensor.ev_vehicle_connected`, `binary_sensor.ev_charging_active`,
+   `binary_sensor.ev_price_cheap`, `sensor.ev_charging_price`,
+   `sensor.ev_battery_percentage`, `sensor.ev_charging_power`,
+   `sensor.ev_energy_meter`) by directly setting `self.entity_id` in each
+   entity's constructor — a deliberate departure from the usual
+   "let HA derive entity_id from name" pattern, because the package,
+   scripts, blueprint, and dashboards all hardcode these exact IDs.
+   `sensor.py` also exposes a diagnostic `sensor.ev_smart_charging_config`
+   whose attributes hold the full configured entity map (used by the
+   blueprint's departure-calendar lookup and the dashboards' Debug section).
+   It owns zero charging *decision* logic — that's the package/blueprint's
+   job.
+2. **`packages/smart_ev_charging.yaml`** — `input_boolean` / `input_number`
+   / `input_datetime` / `input_text` helpers, `counter`, `utility_meter`,
+   `template:` sensors/binary_sensors derived from the integration's
+   mirror entities (charging mode/state/duration/session cost/statistics),
+   and one static automation (`ev_smart_charging_notification_actions`)
+   that listens for `mobile_app_notification_action` events and dispatches
+   to scripts. Reads the integration's entities; never reads the user's
+   raw vehicle/charger entities directly.
+3. **`blueprints/automation/smart_ev_charging.yaml`** — the actual
+   plug/price/charging state machine. User-instantiated once via the HA
+   UI. Only 4 inputs remain (`start_charging_action`, `stop_charging_action`,
+   `notify_service`, `deadline_lead_time_minutes`) — the vehicle/charger/
+   price entities are *not* blueprint inputs; the blueprint reads the
+   integration's fixed mirror entity IDs directly, the same way it already
+   hardcodes `input_boolean.ev_follow_price`. Do not re-add those as
+   `!input` selectors — that would resurrect the double-configuration
+   problem the integration exists to remove. Uses trigger IDs + `choose:`
+   blocks, `mode: queued` to serialize concurrent trigger firings and
+   avoid race conditions.
+4. **`scripts/smart_ev_charging_scripts.yaml`** — all reusable logic
    (notification building, session bookkeeping, dashboard button targets).
    Flat mapping of `script_id: {...}`, merged in via
    `script: !include_dir_merge_named scripts` — do not wrap it in a `script:`
-   key.
-4. **`dashboards/dashboard.yaml`** (native) and
+   key. Reads `sensor.ev_battery_percentage` / `sensor.ev_charging_power` /
+   `sensor.ev_energy_meter` directly rather than receiving them as script
+   fields — only `notify_service` (genuinely per-installation) is passed in.
+5. **`dashboards/dashboard.yaml`** (native) and
    **`dashboards/mushroom_dashboard.yaml`** (enhanced, needs Mushroom +
    ApexCharts) — same information architecture in both, native cards vs.
    `custom:mushroom-*`/`custom:apexcharts-card`. Keep them in sync when
    adding a new sensor/section.
 
-### Why there's a config layer (`input_text` entity pointers)
+### Why the integration's mirror entities exist
 
 Lovelace cards need a fixed `entity_id` at dashboard-authoring time — they
-cannot resolve "whatever entity is named inside this helper" themselves.
-Blueprint `!input` selectors *can* be picked per-installation, but template
-sensors in the static package file cannot take blueprint inputs. The
-resolution is a two-layer indirection:
-
-- `input_text.ev_*_entity` helpers (in the package) store the user's real
-  entity IDs (e.g. `sensor.nordpool_kwh_price`).
-- Template sensors resolve them dynamically via `states(states('input_text.ev_..._entity'))`.
-- Because dashboards need *stable* entity IDs, several sensors exist purely
-  as passthrough mirrors with fixed entity_ids (`sensor.ev_battery_percentage`,
-  `sensor.ev_charging_power`, `binary_sensor.ev_vehicle_connected`,
-  `binary_sensor.ev_charging_active`, `binary_sensor.ev_price_cheap`,
-  `sensor.ev_charging_price`) — don't remove these thinking they're
-  redundant with the input_text config; dashboards depend on them directly.
-- The blueprint's own `!input` selectors are a *separate* configuration
-  step from the `input_text` helpers (users set both, pointing at the same
-  entities) — this intentional duplication is the tradeoff for supporting
-  "any EV/charger" without a custom component. Documented in README FAQ.
+cannot resolve "whatever entity was picked in a config entry" themselves,
+and the blueprint's price/plug triggers need real entity IDs too. Rather
+than making users pick entities twice (once in the integration, again as
+blueprint `!input`s — the v1.0.0 design), the integration is the single
+place configuration happens, and it re-exposes the chosen entities under
+fixed IDs everything else can hardcode. Don't remove the mirror sensors
+thinking they're redundant with the config entry's raw data — dashboards
+and package templates depend on the mirrors' entity IDs directly, not on
+`entry.data`/`entry.options`.
 
 ### Session tracking: use the boolean, not datetime emptiness
 
@@ -133,8 +173,11 @@ HA version and the blueprint's `notify_service` input description.
 
 `script.ev_charge_now` / `script.ev_stop_charging` (called from dashboard
 buttons and the notification-action listener) cannot call the user's
-charger-specific start/stop action directly — that action only exists as a
-per-blueprint-instance `!input`. Instead they toggle
+charger-specific start/stop action directly — that action is only known to
+the blueprint automation, as its `start_charging_action`/`stop_charging_action`
+`!input`s (the two blueprint inputs that genuinely can't be centralized in
+the integration, since "how to start your charger" isn't an entity to
+mirror). Instead the scripts toggle
 `input_boolean.ev_charge_now_override` / `input_boolean.ev_stop_charging_requested`,
 and the blueprint has dedicated triggers (`manual_charge_now`,
 `manual_stop_requested`) that react and call the real action. Preserve this
@@ -142,24 +185,29 @@ indirection when touching either script or the blueprint.
 
 ## Entity naming and cross-file coupling
 
-Everything package-defined is prefixed `ev_` (`input_boolean.ev_follow_price`,
-`sensor.ev_charging_state`, `script.ev_charge_now`, …). When renaming or
-removing any package/script entity, grep across all of
-`packages/`, `blueprints/`, `scripts/`, and both `dashboards/*.yaml` files —
-there is no schema or compiler to catch a stale reference, and the dashboard
-files in particular silently degrade to "entity not found" cards. The
+Everything package/integration-defined is prefixed `ev_` (`input_boolean.ev_follow_price`,
+`sensor.ev_charging_state`, `script.ev_charge_now`, `binary_sensor.ev_vehicle_connected`, …).
+When renaming or removing any entity — whether it originates in the
+integration's `sensor.py`/`binary_sensor.py` or in the package's `template:`
+block — grep across all of `custom_components/`, `packages/`, `blueprints/`,
+`scripts/`, and both `dashboards/*.yaml` files. There is no schema or
+compiler to catch a stale reference; the dashboard files in particular
+silently degrade to "entity not found" cards, and a Jinja template
+referencing a removed entity just silently evaluates to `unknown`. The
 `automation.smart_ev_charging` entity ID referenced in both dashboards is
-not package-defined — it's whatever the user named their blueprint-created
-automation; README calls this out as the one manual-edit point.
+not package/integration-defined — it's whatever the user named their
+blueprint-created automation; README calls this out as the one manual-edit
+point.
 
 ## Versioning and releases
 
-Version is tracked in three places that must move together: `hacs.json`
-(no explicit version field currently — HACS derives it from git
-tags/releases), `CHANGELOG.md`, and the hardcoded
-`sensor.ev_smart_charging_version` state in
-`packages/smart_ev_charging.yaml`. HACS resolves installable versions from
-GitHub releases (falls back to the default branch if none exist), so a
-version bump is: update `CHANGELOG.md` and the version sensor, commit, then
+Version is tracked in three places that must move together: `CHANGELOG.md`,
+the hardcoded `sensor.ev_smart_charging_version` state in
+`packages/smart_ev_charging.yaml`, and `custom_components/smart_ev_charging/manifest.json`'s
+`version` field (this is the one HACS actually reads for the Integration
+category — keep `hacs.json` and the manifest from disagreeing). HACS
+resolves installable versions from GitHub releases (falls back to the
+default branch if none exist), so a version bump is: update `CHANGELOG.md`,
+the version sensor, and `manifest.json`, commit, then
 `git tag -a vX.Y.Z -m "..."`, `git push origin vX.Y.Z`, and
 `gh release create vX.Y.Z --title vX.Y.Z --notes "..."`.

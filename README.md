@@ -2,10 +2,11 @@
 
 Price-aware EV charging that waits for cheap electricity, notifies you along
 the way, and stops automatically when price rises or your target battery
-level is reached. Built as a Home Assistant **package** + **blueprint**, so
-it works with *any* EV/charger integration — no custom component required.
+level is reached. Works with *any* EV/charger integration — you point it at
+your existing vehicle/charger/price entities once, through a normal
+Home Assistant config flow; a package and blueprint do the rest.
 
-![version](https://img.shields.io/badge/version-1.0.0-blue)
+![version](https://img.shields.io/badge/version-2.0.0-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ---
@@ -26,7 +27,8 @@ it works with *any* EV/charger integration — no custom component required.
   session count, average price/duration) via `utility_meter`
 - 📈 Ready-to-import dashboards — native Sections view, plus an enhanced
   Mushroom + ApexCharts version
-- 🧩 No hardcoded entity IDs — one blueprint, any vehicle/charger
+- 🧩 No hardcoded entity IDs — configure your vehicle/charger/price
+  entities once, through a UI config flow
 
 ---
 
@@ -34,6 +36,8 @@ it works with *any* EV/charger integration — no custom component required.
 
 ```
 smart-ev-charging/
+├── custom_components/
+│   └── smart_ev_charging/         # HACS Integration: config flow + entity mirrors
 ├── packages/
 │   └── smart_ev_charging.yaml     # helpers, template sensors, statistics
 ├── blueprints/
@@ -70,25 +74,55 @@ smart-ev-charging/
 
 ---
 
+## Upgrading from 1.x
+
+Version 2.0.0 is a breaking change: HACS dropped its "Package" category
+(what 1.x installed as), so distribution moved to a real
+`custom_components/smart_ev_charging` Integration, and the old
+`input_text.ev_*_entity` config-pointer helpers were replaced by that
+integration's config flow.
+
+To upgrade:
+
+1. Install `custom_components/smart_ev_charging/` (see
+   [Installation](#installation)) and restart Home Assistant.
+2. **Settings > Devices & Services > + Add Integration > Smart EV
+   Charging**, and re-enter the same entity IDs you'd previously put in
+   the `input_text.ev_*_entity` helpers.
+3. Update to the new `packages/smart_ev_charging.yaml` and
+   `blueprints/automation/smart_ev_charging.yaml` from this release —
+   the blueprint now has 4 inputs instead of 11 (open your existing
+   automation and re-save it from the updated blueprint).
+4. The old `input_text.ev_*_entity` helpers are no longer referenced
+   anywhere and can be deleted (Settings > Devices & Services > Helpers).
+5. Session/statistics helpers (`input_number.ev_lifetime_*`,
+   `counter.ev_charging_sessions_total`, etc.) are untouched — no data is
+   lost.
+
+---
+
 ## Installation
 
 ### Via HACS (custom repository)
 
 1. HACS > ⋮ > Custom repositories > add this repository URL, category
-   **Package**.
-2. Install "Smart EV Charging". HACS copies `smart_ev_charging.yaml` into
-   `config/packages/`.
-3. Manually copy the following two folders from this repository into your
-   Home Assistant config directory (HACS's "Package" category only copies
-   the package file itself):
+   **Integration**.
+2. Install "Smart EV Charging" and restart Home Assistant. HACS copies
+   `custom_components/smart_ev_charging/` into your config.
+3. Manually copy the following two items from this repository into your
+   Home Assistant config directory (HACS's Integration category only
+   copies `custom_components/`, not the package/blueprint/scripts/
+   dashboards that round out the feature):
+   - `packages/smart_ev_charging.yaml` → `config/packages/`
    - `blueprints/automation/smart_ev_charging.yaml` →
      `config/blueprints/automation/smart_ev_charging/smart_ev_charging.yaml`
    - `scripts/smart_ev_charging_scripts.yaml` → `config/scripts/`
 
 ### Manual installation
 
-1. Copy `packages/`, `blueprints/`, and `scripts/` into your Home
-   Assistant config directory, merging with any existing folders.
+1. Copy `custom_components/`, `packages/`, `blueprints/`, and `scripts/`
+   into your Home Assistant config directory, merging with any existing
+   folders.
 2. Make sure `configuration.yaml` includes:
 
    ```yaml
@@ -98,33 +132,45 @@ smart-ev-charging/
    script: !include_dir_merge_named scripts
    ```
 
-3. Restart Home Assistant (or reload YAML configuration: packages require
-   a full restart).
+3. Restart Home Assistant (packages and custom integrations both require
+   a full restart, not just a YAML reload).
 
 ---
 
 ## Configuration
 
-### 1. Point the package at your real entities
+### 1. Set up the integration
 
-Go to **Settings > Devices & Services > Helpers** and fill in the
-following text helpers with the entity IDs from your vehicle/charger
-integration (Easee, OCPP, Zaptec, Tesla, a generic smart plug, …):
+**Settings > Devices & Services > + Add Integration > Smart EV Charging.**
+A form asks for the entities from your vehicle/charger and price
+integration (Easee, OCPP, Zaptec, Tesla, a generic smart plug, Nordpool,
+Tibber, …):
 
-| Helper | Required | Example |
+| Field | Required | Example |
 |---|---|---|
-| `input_text.ev_vehicle_connected_entity` | ✅ | `binary_sensor.charger_cable_connected` |
-| `input_text.ev_charging_active_entity` | ✅ | `binary_sensor.charger_charging` |
-| `input_text.ev_price_entity` | ✅ | `sensor.nordpool_kwh_price` |
-| `input_text.ev_cheap_price_entity` | ✅ | `binary_sensor.price_is_cheap` |
-| `input_text.ev_battery_entity` | optional | `sensor.car_battery_level` |
-| `input_text.ev_power_entity` | optional | `sensor.charger_power` |
-| `input_text.ev_energy_entity` | optional | `sensor.charger_energy_total` |
-| `input_text.ev_departure_calendar_entity` | optional | `calendar.work_schedule` |
+| Vehicle connected | ✅ | `binary_sensor.charger_cable_connected` |
+| Charging active | ✅ | `binary_sensor.charger_charging` |
+| Current electricity price | ✅ | `sensor.nordpool_kwh_price` |
+| Cheap electricity | ✅ | `binary_sensor.price_is_cheap` |
+| Battery percentage | optional | `sensor.car_battery_level` |
+| Charging power | optional | `sensor.charger_power` |
+| Energy meter | optional | `sensor.charger_energy_total` |
+| Departure calendar | optional | `calendar.work_schedule` |
 
-`cheap_price` is normally produced by your energy-price integration
-(Nordpool, Tibber, ENTSO-E …) or a small template/threshold helper you
-already have; this package only *reacts* to it.
+"Cheap electricity" is normally produced by your energy-price integration
+or a small template/threshold binary_sensor you already have — this
+package only *reacts* to it. Only one instance of the integration is
+allowed (single-vehicle in v2.0.0 — see [FAQ](#faq)). To change any of
+these entities later, open the integration's **Configure** option instead
+of re-adding it.
+
+The integration exposes what you picked under stable entity IDs
+(`binary_sensor.ev_vehicle_connected`, `binary_sensor.ev_charging_active`,
+`binary_sensor.ev_price_cheap`, `sensor.ev_charging_price`,
+`sensor.ev_battery_percentage`, `sensor.ev_charging_power`,
+`sensor.ev_energy_meter`, plus diagnostic `sensor.ev_smart_charging_config`)
+— the package, scripts, blueprint, and dashboards all read from these, not
+from your raw integration entities directly.
 
 ### 2. Import and configure the blueprint
 
@@ -136,12 +182,10 @@ https://github.com/gokhancelik/smart-ev-charging/blob/master/blueprints/automati
 
 Create a new automation from the blueprint, name it **Smart EV Charging**
 (the dashboards assume `automation.smart_ev_charging` — rename the one
-reference in the dashboard YAML if you use a different name), and fill in:
+reference in the dashboard YAML if you use a different name). The
+blueprint no longer asks you to re-pick your vehicle/charger/price
+entities — it already reads them from step 1. It only needs:
 
-- **Vehicle Connected** / **Charging Active** — the same entities as above
-- **Battery Percentage / Charging Power / Energy Meter** — optional, same
-  as above
-- **Current Electricity Price** / **Cheap Electricity** — same as above
 - **Start Charging Action** / **Stop Charging Action** — whatever action
   actually starts/stops your charger (a `switch.turn_on`, a charger
   integration's `start`/`stop` service, a script, …)
@@ -176,8 +220,8 @@ helpers under **Settings > Devices & Services > Helpers**:
 
 ## Supported integrations
 
-Any integration that exposes the entities below works — the package never
-assumes a specific brand:
+Any integration that exposes the entities below works — the integration's
+config flow and the package never assume a specific brand:
 
 - **Charger / EV state**: Easee, OCPP, Zaptec, go-eCharger, Tesla, Wallbox,
   or a plain `binary_sensor`/`switch` you template yourself
@@ -230,21 +274,25 @@ _Add your own screenshots to `images/` and reference them here — e.g.:_
 ## FAQ
 
 **Does this support multiple vehicles?**
-Not out of the box in v1.0.0 — the package's helpers are single-vehicle.
-For a second car, duplicate `packages/smart_ev_charging.yaml` and every
-entity ID inside it with a different prefix (e.g. `ev2_`), and import a
-second blueprint instance pointing at the new helpers. True multi-vehicle
-support is on the [roadmap](#roadmap).
+Not out of the box — the integration only allows a single config entry,
+and the package's helpers are single-vehicle. For a second car, duplicate
+`packages/smart_ev_charging.yaml` and every entity ID inside it with a
+different prefix (e.g. `ev2_`), duplicate `custom_components/smart_ev_charging`
+under a new domain, and import a second blueprint instance pointing at the
+new helpers/entities. True multi-vehicle support is on the
+[roadmap](#roadmap).
 
 **Why is there no "charging efficiency" sensor?**
 Efficiency (AC energy drawn vs. DC energy stored) needs two separate
 meters. Most integrations only expose one energy sensor, so a computed
 "efficiency" would be misleading. If you have both readings, it's a
-one-line addition to the `template:` section.
+small addition to `custom_components/smart_ev_charging/sensor.py`.
 
 **Can I use a fixed price threshold instead of a "cheap" binary sensor?**
 Yes — create a small template `binary_sensor` that compares your price
-sensor to a threshold, and point `ev_cheap_price_entity` at it.
+sensor to a threshold, and point the integration's "Cheap electricity"
+field at it (Settings > Devices & Services > Smart EV Charging >
+Configure).
 
 **What happens if Home Assistant restarts mid-charge?**
 All helpers restore their last state automatically. If charging was
@@ -261,9 +309,11 @@ you unplug.
 
 | Symptom | Likely cause |
 |---|---|
-| Helpers/sensors don't exist after install | `configuration.yaml` is missing the `packages:` include, or HA wasn't restarted |
+| "Smart EV Charging" doesn't appear in + Add Integration | `custom_components/smart_ev_charging/` is missing or HA wasn't restarted after install |
+| Helpers/sensors from the package don't exist | `configuration.yaml` is missing the `packages:` include, or HA wasn't restarted |
 | Scripts fail with "not found" | `configuration.yaml` is missing the `script: !include_dir_merge_named scripts` include |
-| Sensors show "unavailable" | The matching `input_text.ev_*_entity` config helper is empty or points at a nonexistent entity |
+| `sensor.ev_battery_percentage` / `sensor.ev_charging_power` / `sensor.ev_energy_meter` don't exist | That field was left empty in the integration's config flow — expected, it's optional |
+| `binary_sensor.ev_vehicle_connected` etc. show "unavailable" | The source entity picked in the integration's config flow is itself unavailable — check it directly |
 | Notifications never arrive | Check `notify_service` in the blueprint matches Settings > Devices & Services > your mobile device exactly (`notify.mobile_app_...`) |
 | "Charge now"/"Stop charging" notification buttons do nothing | Confirm the Companion App has notification permissions and background access; check `input_text.ev_last_notification_action` in the Debug dashboard section to see if the event even arrived |
 | Dashboard shows "entity not found" for `automation.smart_ev_charging` | You renamed the automation created from the blueprint — update that one reference in the dashboard YAML |
@@ -277,13 +327,18 @@ template sensor, and the automation's last decision in one place.
 
 ## Roadmap
 
-- [ ] Native `custom_components` integration with a UI config flow
-      (multi-vehicle, no manual helper editing)
+- [x] Native `custom_components` integration with a UI config flow
+      (no manual helper editing)
+- [ ] Multi-vehicle support (multiple config entries, prefixed entities)
 - [ ] Direct Energy Dashboard cost integration
 - [ ] Built-in fixed-price-threshold helper (no separate template needed)
-- [ ] Additional language translations for notifications
+- [ ] Additional language translations for notifications and the config
+      flow (currently English only)
 - [ ] Home Assistant Energy Dashboard "EV charging" native card support
-- [ ] Automated tests / CI YAML linting
+- [ ] Automated tests (`pytest-homeassistant-custom-component`) / CI YAML
+      linting — the integration is currently validated only for Python
+      syntax and JSON well-formedness, not against a running Home
+      Assistant instance
 
 ---
 
