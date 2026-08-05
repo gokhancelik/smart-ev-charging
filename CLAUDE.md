@@ -107,7 +107,7 @@ Five pieces cooperate and none is self-sufficient:
 3. **`blueprints/automation/smart_ev_charging.yaml`** — the actual
    plug/price/charging state machine. User-instantiated once via the HA
    UI. Only 4 inputs remain (`start_charging_action`, `stop_charging_action`,
-   `notify_service`, `deadline_lead_time_minutes`) — the vehicle/charger/
+   `notify_targets`, `deadline_lead_time_minutes`) — the vehicle/charger/
    price entities are *not* blueprint inputs; the blueprint reads the
    integration's fixed mirror entity IDs directly, the same way it already
    hardcodes `input_boolean.ev_follow_price`. Do not re-add those as
@@ -121,7 +121,7 @@ Five pieces cooperate and none is self-sufficient:
    `script: !include_dir_merge_named scripts` — do not wrap it in a `script:`
    key. Reads `sensor.ev_battery_percentage` / `sensor.ev_charging_power` /
    `sensor.ev_energy_meter` directly rather than receiving them as script
-   fields — only `notify_service` (genuinely per-installation) is passed in.
+   fields — only `notify_targets` (genuinely per-installation) is passed in.
 5. **`dashboards/dashboard.yaml`** (native) and
    **`dashboards/mushroom_dashboard.yaml`** (enhanced, needs Mushroom +
    ApexCharts) — same information architecture in both, native cards vs.
@@ -163,14 +163,30 @@ the debug helper and conditionally mirrors to the Logbook when
 `input_boolean.ev_debug_logging` is on. Add new decision points through
 this script, not by duplicating the two-step pattern inline.
 
-### Notify service calls
+### Notify targeting: device-based, not a typed service string
 
-Scripts call the notify service dynamically — `action: "{{ notify_service }}"`
-with a plain literal service name string (e.g. `notify.mobile_app_pixel_7`),
-not the newer `notify.send_message` + `target: entity_id:` pattern. This is
-intentional for broader compatibility across notify integrations, not an
-oversight — don't "modernize" it without checking README's stated minimum
-HA version and the blueprint's `notify_service` input description.
+The blueprint's `notify_targets` input is a `device` selector
+(`multiple: true`, filtered to the `mobile_app` integration) — the user
+picks phones/tablets by name instead of typing a `notify.mobile_app_...`
+service string. `script.ev_send_notification` (in
+`scripts/smart_ev_charging_scripts.yaml`) is the single place that
+actually sends: it calls `notify.send_message` with
+`target: {device_id: [...]}`, which fans out to every selected device in
+one call — no manual loop. Every other notify-sending script
+(`ev_notify_plugged_in`, `ev_notify_charging_started`,
+`ev_notify_charging_finished`) must go through this shared script rather
+than calling a notify action directly, both to avoid duplicating the
+multi-device fan-out and to keep the tag-based dismiss/replace behavior
+consistent across all targets.
+
+This is a deliberate compatibility tradeoff, made explicitly at the
+user's request for a "friendly, not typed" field: `notify.send_message`
+with device/entity `target:` dispatch for mobile_app only works on **Home
+Assistant 2026.5+** (mobile_app notify entities didn't exist before that
+release) — see `hacs.json`'s `homeassistant` field and README's
+Installation section, which must stay in sync with this constraint. Don't
+"restore" the old typed-string dynamic-service-call pattern without
+re-raising this tradeoff — it was the whole point of the change.
 
 ### Manual charge-now / stop-charging use pulse booleans, not direct actions
 

@@ -49,13 +49,19 @@ blueprint:
       selector:
         action: {}
 
-    notify_service:
-      name: Notify Service
+    notify_targets:
+      name: Notify Devices
       description: >
-        Mobile app notify service to use, e.g. "notify.mobile_app_pixel_7".
-        Must support Android and/or iOS actionable notifications.
+        One or more mobile devices (Android or iOS, running the Home
+        Assistant Companion App) to send charging notifications to. Add
+        more than one to notify multiple phones/tablets — tapping an
+        actionable button (Charge now / Stop charging) on any of them
+        works the same way. Requires Home Assistant 2026.5 or newer.
       selector:
-        text: {}
+        device:
+          multiple: true
+          filter:
+            integration: mobile_app
 
     deadline_lead_time_minutes:
       name: Departure Deadline Lead Time (minutes)
@@ -78,7 +84,7 @@ variables:
   energy_meter: sensor.ev_energy_meter
   current_price: sensor.ev_charging_price
   cheap_price: binary_sensor.ev_price_cheap
-  notify_service: !input notify_service
+  notify_targets: !input notify_targets
   deadline_lead_time_minutes: !input deadline_lead_time_minutes
 
 triggers:
@@ -164,7 +170,7 @@ actions:
         sequence:
           - action: script.ev_notify_plugged_in
             data:
-              notify_service: "{{ notify_service }}"
+              notify_targets: "{{ notify_targets }}"
 
       # -----------------------------------------------------------------
       # Vehicle disconnected: clear session-only override
@@ -241,7 +247,7 @@ actions:
         sequence:
           - action: script.ev_notify_charging_started
             data:
-              notify_service: "{{ notify_service }}"
+              notify_targets: "{{ notify_targets }}"
 
       # -----------------------------------------------------------------
       # Charging actually stopped: dismiss notification, log session
@@ -252,7 +258,7 @@ actions:
         sequence:
           - action: script.ev_notify_charging_finished
             data:
-              notify_service: "{{ notify_service }}"
+              notify_targets: "{{ notify_targets }}"
 
       # -----------------------------------------------------------------
       # Battery reached target while charging: stop
@@ -347,7 +353,7 @@ actions:
         sequence:
           - action: script.ev_notify_charging_started
             data:
-              notify_service: "{{ notify_service }}"
+              notify_targets: "{{ notify_targets }}"
 
       # -----------------------------------------------------------------
       # Manual "Charge now" request: bypass price checks entirely

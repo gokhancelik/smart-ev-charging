@@ -6,7 +6,7 @@ level is reached. Works with *any* EV/charger integration — you point it at
 your existing vehicle/charger/price entities once, through a normal
 Home Assistant config flow; a package and blueprint do the rest.
 
-![version](https://img.shields.io/badge/version-1.1.1-blue)
+![version](https://img.shields.io/badge/version-1.2.0-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ---
@@ -75,6 +75,10 @@ smart-ev-charging/
 ---
 
 ## Installation
+
+Requires **Home Assistant 2026.5 or newer** — the blueprint's "Notify
+Devices" picker depends on mobile_app notify entities, which were only
+added in that release.
 
 ### Via HACS (custom repository)
 
@@ -180,7 +184,12 @@ entities — it already reads them from step 1. It only needs:
 - **Start Charging Action** / **Stop Charging Action** — whatever action
   actually starts/stops your charger (a `switch.turn_on`, a charger
   integration's `start`/`stop` service, a script, …)
-- **Notify Service** — e.g. `notify.mobile_app_pixel_7`
+- **Notify Devices** — pick one or more phones/tablets running the
+  Companion App from the device list (search by device name, no typing
+  required). Add more than one to notify multiple people/devices —
+  tapping Charge now / Stop charging on any of them works the same way.
+  Requires **Home Assistant 2026.5 or newer** (mobile_app notify
+  entities).
 - **Departure Deadline Lead Time** — how many minutes before departure to
   force-start if price still isn't cheap (default 120)
 
@@ -294,6 +303,13 @@ sensor and fill in the matching "matching states" field (comma-separated
 raw values that count as on for that concept) — see
 [Configuration](#configuration). No template YAML needed.
 
+**Can I send notifications to more than one phone?**
+Yes — the blueprint's "Notify Devices" field accepts multiple devices.
+Every device gets the same actionable notifications (plugged in,
+charging, finished), and pressing Charge now / Stop charging on any one
+of them works the same way, since the button-press listener isn't tied
+to a specific device.
+
 **What happens if Home Assistant restarts mid-charge?**
 All helpers restore their last state automatically. If charging was
 already active before the restart, the blueprint backfills session
@@ -315,7 +331,8 @@ you unplug.
 | `sensor.ev_battery_percentage` / `sensor.ev_charging_power` / `sensor.ev_energy_meter` don't exist | That field was left empty in the integration's config flow — expected, it's optional |
 | `binary_sensor.ev_vehicle_connected` etc. show "unavailable" | The source entity picked in the integration's config flow is itself unavailable — check it directly |
 | `binary_sensor.ev_vehicle_connected`/`ev_charging_active` never turn on, even though the source status sensor changes | The "matching states" field doesn't match your source sensor's actual values — open the source entity's state history and copy the exact text (matching is case-insensitive, but must otherwise match exactly) |
-| Notifications never arrive | Check `notify_service` in the blueprint matches Settings > Devices & Services > your mobile device exactly (`notify.mobile_app_...`) |
+| Notifications never arrive | Confirm the device is still listed under Settings > Devices & Services > Mobile App, and that it's actually selected in the blueprint's "Notify Devices" field |
+| Blueprint's "Notify Devices" field is empty or missing | Your Home Assistant version is older than 2026.5 — this field needs mobile_app notify entities, which didn't exist before that release |
 | "Charge now"/"Stop charging" notification buttons do nothing | Confirm the Companion App has notification permissions and background access; check `input_text.ev_last_notification_action` in the Debug dashboard section to see if the event even arrived |
 | Dashboard shows "entity not found" for `automation.smart_ev_charging` | You renamed the automation created from the blueprint — update that one reference in the dashboard YAML |
 | Duration/cost sensors look wrong after a restart | Confirm `input_boolean.ev_session_tracking` reflects the actual charging state — toggle `charging_active` off/on once to resync |

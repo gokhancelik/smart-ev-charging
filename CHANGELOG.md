@@ -5,6 +5,28 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-08-05
+
+### Changed (requires reconfiguration)
+
+- The blueprint's "Notify Service" text field (`notify_service`, typed
+  service names like `notify.mobile_app_pixel_7`) is replaced by "Notify
+  Devices" (`notify_targets`), a device picker supporting multiple
+  devices — no typing required, and notifications now go to every
+  selected device instead of just one. Existing automations built from
+  the blueprint need this field re-selected after updating.
+- **Minimum Home Assistant version raised to 2026.5.0** (was 2024.12.0):
+  the device-picker notify dispatch (`notify.send_message` +
+  `target: device_id`) depends on mobile_app notify entities, only added
+  in that release. Installs on older Home Assistant versions cannot use
+  this blueprint version.
+
+### Added
+
+- `script.ev_send_notification`: shared notification dispatch used by
+  every notify-sending script, fanning a message out to all selected
+  devices in one call.
+
 ## [1.1.1] - 2026-08-05
 
 ### Added
