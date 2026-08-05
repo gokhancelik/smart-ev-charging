@@ -5,6 +5,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.8] - 2026-08-06
+
+### Fixed
+
+- The integration's **Options** menu now shows its three action labels
+  ("Change the configured entities", "Install or update the dashboard",
+  "Uninstall the dashboard"). The labels were translated under a wrong
+  backend key (`menu` instead of `menu_options`), so only the heading and
+  hint text appeared and the three buttons were blank.
+- The automation blueprint no longer errors with *"unknown action:
+  script.ev_debug_log"* when the companion scripts aren't loaded (e.g. the
+  `script: !include_dir_merge_named scripts` include is missing). Each
+  debug-log line is now guarded by `has_value('script.ev_debug_log')` and
+  is simply skipped when the script isn't available.
+
 ## [1.4.7] - 2026-08-05
 
 ### Added

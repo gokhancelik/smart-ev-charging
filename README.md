@@ -6,7 +6,7 @@ level is reached. Works with *any* EV/charger integration — you point it at
 your existing vehicle/charger/price entities once, through a normal
 Home Assistant config flow; a package and blueprint do the rest.
 
-![version](https://img.shields.io/badge/version-1.4.7-blue)
+![version](https://img.shields.io/badge/version-1.4.8-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ---
@@ -364,7 +364,7 @@ in the blueprints directory.
 | Blueprint not listed under Settings > Blueprints after adding the integration | Check the "Smart EV Charging: setup" notification confirmed it was synced; verify `blueprints/automation/smart_ev_charging/smart_ev_charging.yaml` directly |
 | Creating the automation from the blueprint fails with "Message malformed: value should be a string for dictionary value @ ...['action']" | You have a pre-1.3.1 copy of the blueprint. Restart Home Assistant once (the integration re-syncs the blueprint file on every restart, unlike the dashboard) or delete `blueprints/automation/smart_ev_charging/smart_ev_charging.yaml` and restart to force a fresh copy |
 | Helpers/sensors from the package don't exist | `configuration.yaml` is missing the `packages:` include, or HA wasn't restarted |
-| Scripts fail with "not found" | `configuration.yaml` is missing the `script: !include_dir_merge_named scripts` include |
+| Scripts fail with "not found" | `configuration.yaml` is missing the `script: !include_dir_merge_named scripts` include. Add it and reload. The automation itself won't break without the debug script (`script.ev_debug_log`) — it only skips the debug-log lines — but the notification/booking-keeping scripts must exist, so add the include and copy `scripts/` before relying on notifications |
 | `sensor.ev_battery_percentage` / `sensor.ev_charging_power` / `sensor.ev_energy_meter` don't exist | That field was left empty in the integration's config flow — expected, it's optional |
 | `binary_sensor.ev_vehicle_connected` etc. show "unavailable" | The source entity picked in the integration's config flow is itself unavailable — check it directly |
 | `binary_sensor.ev_vehicle_connected`/`ev_charging_active` never turn on, even though the source status sensor changes | No "matching states" were marked for that source in the config flow's "Status sensor states" screen, or the ticked values don't match your source sensor's actual ones — re-open Configure and pick the exact states (matching is case-insensitive, but must otherwise match exactly) |

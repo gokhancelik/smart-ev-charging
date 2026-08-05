@@ -237,6 +237,98 @@ def test_options_flow_init_shows_menu(hass):
     ]
 
 
+def test_options_flow_configure_shows_form(hass):
+    """The Options menu 'configure' entry reaches a form (not a dead end)."""
+    from custom_components.smart_ev_charging.config_flow import (
+        SmartEvChargingOptionsFlow,
+    )
+    from homeassistant.config_entries import ConfigEntry
+
+    flow = SmartEvChargingOptionsFlow()
+    flow.hass = hass
+    flow.config_entry = ConfigEntry()
+    result = _run(flow.async_step_configure(None))
+    assert result["type"] == "form"
+    assert result["step_id"] == "configure"
+    assert result["data_schema"] is not None
+    field_keys = [k.schema for k in result["data_schema"].schema]
+    assert set(field_keys) == {
+        "vehicle_connected",
+        "charging_active",
+        "price",
+        "cheap_price",
+        "battery",
+        "power",
+        "energy",
+        "departure_calendar",
+    }
+
+
+# ------------------------------------------------------ string/translation consistency
+
+
+def test_options_step_translations_match_schema(hass):
+    """Every Options-flow step's schema keys must have a label in strings/en.json.
+
+    If a step id or a field key is renamed without the matching translation
+    update, the UI shows a blank/raw key instead of human text.
+    """
+    import json
+    import pathlib
+
+    from custom_components.smart_ev_charging.config_flow import (
+        SmartEvChargingOptionsFlow,
+    )
+    from custom_components.smart_ev_charging.const import (
+        CONF_BATTERY,
+        CONF_CHEAP_PRICE,
+        CONF_CHARGING_ACTIVE,
+        CONF_DEPARTURE_CALENDAR,
+        CONF_ENERGY,
+        CONF_POWER,
+        CONF_PRICE,
+        CONF_VEHICLE_CONNECTED,
+    )
+    from homeassistant.config_entries import ConfigEntry
+
+    comp = pathlib.Path(__file__).resolve().parents[1] / "custom_components" / "smart_ev_charging"
+    strings = json.loads((comp / "strings.json").read_text(encoding="utf-8"))
+    en = json.loads((comp / "translations" / "en.json").read_text(encoding="utf-8"))
+    assert strings["options"] == en["options"], "strings.json and en.json options differ"
+
+    steps = strings["options"]["step"]
+
+    # 1) menu entries in step "init"
+    assert steps["init"]["menu_options"] == {
+        "configure": "Change the configured entities",
+        "install_dashboard": "Install or update the dashboard",
+        "uninstall_dashboard": "Uninstall the dashboard",
+    }
+
+    # 2) every data key in "configure" and "states" labels matches the schema
+    expected_configure = {
+        CONF_VEHICLE_CONNECTED,
+        CONF_CHARGING_ACTIVE,
+        CONF_PRICE,
+        CONF_CHEAP_PRICE,
+        CONF_BATTERY,
+        CONF_POWER,
+        CONF_ENERGY,
+        CONF_DEPARTURE_CALENDAR,
+    }
+    for step_id, schema_fields in (("configure", expected_configure),):
+        data = set(steps[step_id]["data"])
+        assert data == schema_fields, f"step {step_id} data keys != schema: {data ^ schema_fields}"
+        missing_desc = schema_fields - set(steps[step_id]["data_description"])
+        assert not missing_desc, f"step {step_id} missing data_description for {missing_desc}"
+
+    # 3) the states step must also exist with both its keys labelled
+    assert set(steps["states"]["data"]) == {
+        "vehicle_connected_states",
+        "charging_active_states",
+    }
+
+
 def test_options_flow_preserves_stored_states_as_defaults(hass):
     """Reconfiguring keeps previously-selected states pre-filled in the states schema."""
     from custom_components.smart_ev_charging.config_flow import (

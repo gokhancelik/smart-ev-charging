@@ -188,9 +188,13 @@ actions:
           - action: input_boolean.turn_off
             target:
               entity_id: input_boolean.ev_charge_now_override
-          - action: script.ev_debug_log
-            data:
-              message: "Vehicle disconnected"
+          - if:
+              - condition: template
+                value_template: "{{ has_value('script.ev_debug_log') }}"
+            then:
+              - action: script.ev_debug_log
+                data:
+                  message: "Vehicle disconnected"
 
       # -----------------------------------------------------------------
       # Price became cheap: start charging if conditions are met
@@ -217,9 +221,13 @@ actions:
                  or states(battery_percentage) in ['unknown', 'unavailable']
                  or (states(battery_percentage) | float(0)) < (states('input_number.ev_target_battery_percentage') | float(100)) }}
         sequence:
-          - action: script.ev_debug_log
-            data:
-              message: "Starting: price is cheap ({{ states(current_price) }})"
+          - if:
+              - condition: template
+                value_template: "{{ has_value('script.ev_debug_log') }}"
+            then:
+              - action: script.ev_debug_log
+                data:
+                  message: "Starting: price is cheap ({{ states(current_price) }})"
           - choose: []
             default: !input start_charging_action
 
@@ -239,9 +247,13 @@ actions:
             entity_id: binary_sensor.ev_charging_active
             state: "on"
         sequence:
-          - action: script.ev_debug_log
-            data:
-              message: "Stopping: price is no longer cheap ({{ states(current_price) }})"
+          - if:
+              - condition: template
+                value_template: "{{ has_value('script.ev_debug_log') }}"
+            then:
+              - action: script.ev_debug_log
+                data:
+                  message: "Stopping: price is no longer cheap ({{ states(current_price) }})"
           - choose: []
             default: !input stop_charging_action
 
@@ -286,9 +298,13 @@ actions:
             value_template: >-
               {{ (states(battery_percentage) | float(0)) >= (states('input_number.ev_target_battery_percentage') | float(100)) }}
         sequence:
-          - action: script.ev_debug_log
-            data:
-              message: "Stopping: target battery percentage reached ({{ states(battery_percentage) }}%)"
+          - if:
+              - condition: template
+                value_template: "{{ has_value('script.ev_debug_log') }}"
+            then:
+              - action: script.ev_debug_log
+                data:
+                  message: "Stopping: target battery percentage reached ({{ states(battery_percentage) }}%)"
           - choose: []
             default: !input stop_charging_action
 
@@ -317,9 +333,13 @@ actions:
                     value_template: >-
                       {{ (states(battery_percentage) | float(100)) <= (states('input_number.ev_low_battery_threshold') | float(0)) }}
                 sequence:
-                  - action: script.ev_debug_log
-                    data:
-                      message: "Starting: low battery emergency ({{ states(battery_percentage) }}%)"
+                  - if:
+                      - condition: template
+                        value_template: "{{ has_value('script.ev_debug_log') }}"
+                    then:
+                      - action: script.ev_debug_log
+                        data:
+                          message: "Starting: low battery emergency ({{ states(battery_percentage) }}%)"
                   - choose: []
                     default: !input start_charging_action
 
@@ -345,9 +365,13 @@ actions:
                         {% endif %}
                       {% endif %}
                 sequence:
-                  - action: script.ev_debug_log
-                    data:
-                      message: "Starting: departure deadline approaching"
+                  - if:
+                      - condition: template
+                        value_template: "{{ has_value('script.ev_debug_log') }}"
+                    then:
+                      - action: script.ev_debug_log
+                        data:
+                          message: "Starting: departure deadline approaching"
                   - choose: []
                     default: !input start_charging_action
 
@@ -379,9 +403,13 @@ actions:
             entity_id: binary_sensor.ev_charging_active
             state: "off"
         sequence:
-          - action: script.ev_debug_log
-            data:
-              message: "Starting: manual 'Charge now' request"
+          - if:
+              - condition: template
+                value_template: "{{ has_value('script.ev_debug_log') }}"
+            then:
+              - action: script.ev_debug_log
+                data:
+                  message: "Starting: manual 'Charge now' request"
           - choose: []
             default: !input start_charging_action
 
@@ -398,9 +426,13 @@ actions:
                 entity_id: binary_sensor.ev_charging_active
                 state: "on"
             then:
-              - action: script.ev_debug_log
-                data:
-                  message: "Stopping: manual 'Stop charging' request"
+              - if:
+                  - condition: template
+                    value_template: "{{ has_value('script.ev_debug_log') }}"
+                then:
+                  - action: script.ev_debug_log
+                    data:
+                      message: "Stopping: manual 'Stop charging' request"
               - choose: []
                 default: !input stop_charging_action
           - action: input_boolean.turn_off
