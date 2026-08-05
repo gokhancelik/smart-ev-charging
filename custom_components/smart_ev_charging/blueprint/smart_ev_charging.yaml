@@ -220,8 +220,8 @@ actions:
           - action: script.ev_debug_log
             data:
               message: "Starting: price is cheap ({{ states(current_price) }})"
-          - choose:
-              default: !input start_charging_action
+          - choose: []
+            default: !input start_charging_action
 
       # -----------------------------------------------------------------
       # Price became expensive: stop charging if we are the ones charging
@@ -242,8 +242,8 @@ actions:
           - action: script.ev_debug_log
             data:
               message: "Stopping: price is no longer cheap ({{ states(current_price) }})"
-          - choose:
-              default: !input stop_charging_action
+          - choose: []
+            default: !input stop_charging_action
 
       # -----------------------------------------------------------------
       # Charging actually started: seed session data (idempotent) and
@@ -289,8 +289,8 @@ actions:
           - action: script.ev_debug_log
             data:
               message: "Stopping: target battery percentage reached ({{ states(battery_percentage) }}%)"
-          - choose:
-              default: !input stop_charging_action
+          - choose: []
+            default: !input stop_charging_action
 
       # -----------------------------------------------------------------
       # Periodic check: low-battery emergency override + departure deadline
@@ -320,8 +320,8 @@ actions:
                   - action: script.ev_debug_log
                     data:
                       message: "Starting: low battery emergency ({{ states(battery_percentage) }}%)"
-                  - choose:
-                      default: !input start_charging_action
+                  - choose: []
+                    default: !input start_charging_action
 
               # Departure deadline approaching: force start regardless of price
               - conditions:
@@ -348,8 +348,8 @@ actions:
                   - action: script.ev_debug_log
                     data:
                       message: "Starting: departure deadline approaching"
-                  - choose:
-                      default: !input start_charging_action
+                  - choose: []
+                    default: !input start_charging_action
 
       # -----------------------------------------------------------------
       # Periodic refresh of the live "charging" notification so battery
@@ -382,8 +382,8 @@ actions:
           - action: script.ev_debug_log
             data:
               message: "Starting: manual 'Charge now' request"
-          - choose:
-              default: !input start_charging_action
+          - choose: []
+            default: !input start_charging_action
 
       # -----------------------------------------------------------------
       # Manual "Stop charging" request. Always resets the request pulse,
@@ -401,8 +401,8 @@ actions:
               - action: script.ev_debug_log
                 data:
                   message: "Stopping: manual 'Stop charging' request"
-              - choose:
-                  default: !input stop_charging_action
+              - choose: []
+                default: !input stop_charging_action
           - action: input_boolean.turn_off
             target:
               entity_id: input_boolean.ev_stop_charging_requested

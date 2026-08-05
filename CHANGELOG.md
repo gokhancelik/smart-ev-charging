@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.1] - 2026-08-05
+
+### Fixed
+
+- The blueprint's action-splice workaround (empty `choose` whose `default`
+  holds `start_charging_action`/`stop_charging_action`) placed `default`
+  *inside* `choose`, so "Create Automation from blueprint" failed with
+  `Message malformed: extra keys not allowed @ data['actions'][0]
+  ['choose'][2]['sequence'][1]['choose'][0]['default']`. `choose` is a
+  list and `default` must be a sibling key, i.e. `- choose: []` followed
+  by `default: !input ...`. Corrected in all 7 splice points.
+
 ## [1.4.0] - 2026-08-05
 
 ### Changed
