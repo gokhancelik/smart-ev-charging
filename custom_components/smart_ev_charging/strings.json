@@ -13,6 +13,16 @@
           "power": "Charging power (optional, sensor)",
           "energy": "Energy meter (optional, sensor)",
           "departure_calendar": "Departure calendar (optional, calendar)"
+        },
+        "data_description": {
+          "vehicle_connected": "Turns on when the charging cable is plugged in. Determines when Smart EV Charging starts waiting for a cheap price.",
+          "charging_active": "Turns on only while the vehicle is actually drawing power. Used to detect when a charging session really starts and stops.",
+          "price": "Your current electricity price. Shown in notifications and used to calculate session cost.",
+          "cheap_price": "Turns on when electricity is currently considered cheap (from your price integration, e.g. Nordpool or Tibber, or your own threshold template). Charging starts automatically while this is on.",
+          "battery": "The vehicle's state of charge in percent. Enables the stop-at-target-battery-% and low-battery-emergency features, and battery readouts in notifications and dashboards.",
+          "power": "Current charging power (e.g. kW). Shown in notifications and dashboards; not required for any charging decision.",
+          "energy": "Cumulative energy delivered by the charger, in kWh. Used to calculate energy delivered and cost for the current session.",
+          "departure_calendar": "A calendar whose next event start time is treated as your departure deadline — charging is forced on if the cheap price hasn't arrived in time. Leave empty to use a fixed daily departure time instead (set via the input_datetime.ev_departure_time helper)."
         }
       }
     },
@@ -34,6 +44,16 @@
           "power": "Charging power (optional, sensor)",
           "energy": "Energy meter (optional, sensor)",
           "departure_calendar": "Departure calendar (optional, calendar)"
+        },
+        "data_description": {
+          "vehicle_connected": "Turns on when the charging cable is plugged in. Determines when Smart EV Charging starts waiting for a cheap price.",
+          "charging_active": "Turns on only while the vehicle is actually drawing power. Used to detect when a charging session really starts and stops.",
+          "price": "Your current electricity price. Shown in notifications and used to calculate session cost.",
+          "cheap_price": "Turns on when electricity is currently considered cheap. Charging starts automatically while this is on.",
+          "battery": "The vehicle's state of charge in percent. Enables the stop-at-target-battery-% and low-battery-emergency features, and battery readouts in notifications and dashboards.",
+          "power": "Current charging power (e.g. kW). Shown in notifications and dashboards; not required for any charging decision.",
+          "energy": "Cumulative energy delivered by the charger, in kWh. Used to calculate energy delivered and cost for the current session.",
+          "departure_calendar": "A calendar whose next event start time is treated as your departure deadline. Leave empty to use a fixed daily departure time instead (set via the input_datetime.ev_departure_time helper)."
         }
       }
     }
