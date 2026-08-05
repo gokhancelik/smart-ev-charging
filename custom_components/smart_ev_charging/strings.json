@@ -45,6 +45,15 @@
   "options": {
     "step": {
       "init": {
+        "title": "Smart EV Charging options",
+        "description": "Choose what to do.",
+        "menu": {
+          "configure": "Change the configured entities",
+          "install_dashboard": "Install or update the dashboard",
+          "uninstall_dashboard": "Uninstall the dashboard"
+        }
+      },
+      "configure": {
         "title": "Update Smart EV Charging entities",
         "description": "Change the entities Smart EV Charging is pointed at.",
         "data": {

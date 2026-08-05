@@ -14,10 +14,18 @@ import logging
 import shutil
 from pathlib import Path
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+import voluptuous as vol
 
-from .const import PLATFORMS
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant, ServiceCall
+
+from .const import (
+    DOMAIN,
+    PLATFORMS,
+    SERVICE_INSTALL_DASHBOARD,
+    SERVICE_UNINSTALL_DASHBOARD,
+)
+from .dashboard import install_dashboard, rebuild_installed_dashboard, uninstall_dashboard
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,6 +42,20 @@ _DASHBOARD_DEST_PARTS = ("dashboards", "smart_ev_charging_dashboard.yaml")
 _NOTIFICATION_ID = "smart_ev_charging_setup"
 
 
+async def _async_install_dashboard_service(
+    hass: HomeAssistant, call: ServiceCall
+) -> None:
+    """Install or update the Smart EV Charging dashboard."""
+    await install_dashboard(hass)
+
+
+async def _async_uninstall_dashboard_service(
+    hass: HomeAssistant, call: ServiceCall
+) -> None:
+    """Remove the Smart EV Charging dashboard."""
+    await uninstall_dashboard(hass)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -43,6 +65,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     if blueprint_synced or dashboard_installed:
         await _async_notify_setup_complete(hass, blueprint_synced, dashboard_installed)
+
+    await rebuild_installed_dashboard(hass)
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_INSTALL_DASHBOARD,
+        _async_install_dashboard_service,
+        schema=vol.Schema({}),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_UNINSTALL_DASHBOARD,
+        _async_uninstall_dashboard_service,
+        schema=vol.Schema({}),
+    )
 
     return True
 

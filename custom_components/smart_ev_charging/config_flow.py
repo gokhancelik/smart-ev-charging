@@ -47,8 +47,10 @@ from .const import (
     CONF_PRICE,
     CONF_VEHICLE_CONNECTED,
     CONF_VEHICLE_CONNECTED_STATES,
+    DASHBOARD_TITLE,
     DOMAIN,
 )
+from .dashboard import install_dashboard, uninstall_dashboard
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -316,7 +318,7 @@ class SmartEvChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class SmartEvChargingOptionsFlow(config_entries.OptionsFlow):
-    """Let the user change the configured entities after setup."""
+    """Options flow: menu-driven configure / install / uninstall dashboard."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -326,6 +328,17 @@ class SmartEvChargingOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
+        """Show the main options menu."""
+        menu = ["configure", "install_dashboard", "uninstall_dashboard"]
+        return self.async_show_menu(
+            step_id="init",
+            menu_options=menu,
+        )
+
+    async def async_step_configure(
+        self, user_input: dict | None = None
+    ) -> config_entries.ConfigFlowResult:
+        self._history = {}
         if user_input is not None:
             # The init schema only contains entity pickers, so the submitted
             # user_input has no *_states keys. Carry the stored ones across so
@@ -345,8 +358,29 @@ class SmartEvChargingOptionsFlow(config_entries.OptionsFlow):
 
         current = {**self.config_entry.data, **self.config_entry.options}
         return self.async_show_form(
-            step_id="init", data_schema=_build_entity_schema(current)
+            step_id="configure", data_schema=_build_entity_schema(current)
         )
+
+    async def async_step_install_dashboard(
+        self, user_input: dict | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Install or update the bundled dashboard, then return to the menu."""
+        ok = await install_dashboard(self.hass)
+        _LOGGER.info(
+            "Smart EV Charging dashboard install %s", "succeeded" if ok else "failed"
+        )
+        return self.async_create_entry(title="", data={})
+
+    async def async_step_uninstall_dashboard(
+        self, user_input: dict | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Remove the dashboard, then return to the menu."""
+        ok = await uninstall_dashboard(self.hass)
+        _LOGGER.info(
+            "Smart EV Charging dashboard uninstall %s",
+            "succeeded" if ok else "failed",
+        )
+        return self.async_create_entry(title="", data={})
 
     async def async_step_states(
         self, user_input: dict | None = None
@@ -361,3 +395,4 @@ class SmartEvChargingOptionsFlow(config_entries.OptionsFlow):
             step_id="states",
             data_schema=_build_states_schema(self.hass, captured, history),
         )
+

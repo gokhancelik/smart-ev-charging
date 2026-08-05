@@ -5,6 +5,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.7] - 2026-08-05
+
+### Added
+
+- The bundled dashboard can now be installed/updated and uninstalled from
+  the integration's **Options** menu (Settings > Devices & Services >
+  Smart EV Charging > Options), instead of only by pasting YAML. A running
+  dashboard is automatically refreshed on every Home Assistant start.
+  Also exposed as `smart_ev_charging.install_dashboard` and
+  `smart_ev_charging.uninstall_dashboard` services.
+
 ## [1.4.6] - 2026-08-05
 
 ### Fixed

@@ -6,6 +6,13 @@ DOMAIN = "smart_ev_charging"
 
 PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR]
 
+SERVICE_INSTALL_DASHBOARD = "install_dashboard"
+SERVICE_UNINSTALL_DASHBOARD = "uninstall_dashboard"
+
+DASHBOARD_URL_PATH = "smart-ev-charging"
+DASHBOARD_TITLE = "Smart EV Charging"
+DASHBOARD_ICON = "mdi:ev-station"
+
 CONF_VEHICLE_CONNECTED = "vehicle_connected"
 CONF_VEHICLE_CONNECTED_STATES = "vehicle_connected_states"
 CONF_CHARGING_ACTIVE = "charging_active"

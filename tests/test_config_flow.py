@@ -219,6 +219,24 @@ def test_clean_drops_empty_values():
     assert _clean({"a": "x", "b": "", "c": [], "d": None}) == {"a": "x"}
 
 
+def test_options_flow_init_shows_menu(hass):
+    from custom_components.smart_ev_charging.config_flow import (
+        SmartEvChargingOptionsFlow,
+    )
+    from homeassistant.config_entries import ConfigEntry
+
+    flow = SmartEvChargingOptionsFlow()
+    flow.hass = hass
+    flow.config_entry = ConfigEntry()
+    result = _run(flow.async_step_init())
+    assert result["type"] == "menu"
+    assert result["menu_options"] == [
+        "configure",
+        "install_dashboard",
+        "uninstall_dashboard",
+    ]
+
+
 def test_options_flow_preserves_stored_states_as_defaults(hass):
     """Reconfiguring keeps previously-selected states pre-filled in the states schema."""
     from custom_components.smart_ev_charging.config_flow import (
@@ -236,7 +254,7 @@ def test_options_flow_preserves_stored_states_as_defaults(hass):
         options={"vehicle_connected_states": ["Charging", "Completed"]},
     )
     result = _run(
-        flow.async_step_init(
+        flow.async_step_configure(
             {
                 "vehicle_connected": "sensor.charger_status",
                 "charging_active": "binary_sensor.charging_active",

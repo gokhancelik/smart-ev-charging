@@ -6,7 +6,7 @@ level is reached. Works with *any* EV/charger integration — you point it at
 your existing vehicle/charger/price entities once, through a normal
 Home Assistant config flow; a package and blueprint do the rest.
 
-![version](https://img.shields.io/badge/version-1.4.6-blue)
+![version](https://img.shields.io/badge/version-1.4.7-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ---
@@ -207,14 +207,16 @@ them from step 1. It only needs:
 
 ### 3. Add the dashboard
 
-Home Assistant doesn't give integrations a safe way to add a dashboard to
-your sidebar automatically (it'd require touching undocumented Lovelace
-internals with a known history of silently destroying dashboard data —
-not a risk worth taking), so this one step stays manual: **Settings >
-Dashboards > + Add Dashboard > New dashboard from YAML**, then paste the
-contents of the file step 1 already copied to
-`config/dashboards/smart_ev_charging_dashboard.yaml`.
+You can install the bundled dashboard automatically from the integration's
+options menu: **Settings > Devices & Services > Smart EV Charging > ⋮ >
+Options**, then choose **Install or update the dashboard**. This registers
+the "Smart EV Charging" dashboard (a native Sections view using only
+built-in cards) in your sidebar and keeps it up to date on every Home
+Assistant start.
 
+If you'd rather add it manually, the file step 1 copied to
+`config/dashboards/smart_ev_charging_dashboard.yaml` can be pasted via
+**Settings > Dashboards > + Add Dashboard > New dashboard from YAML**.
 Prefer the enhanced version instead? Copy `dashboards/mushroom_dashboard.yaml`
 from this repository (not auto-installed) if you have
 [Mushroom](https://github.com/piitaya/lovelace-mushroom) and
@@ -338,16 +340,16 @@ tracking on startup so duration/energy/cost stay accurate.
 No — it only overrides the current session. It resets automatically when
 you unplug.
 
-**Why doesn't the dashboard just appear in my sidebar automatically, like the blueprint does?**
-Home Assistant has no officially supported, stable API for an integration
-to register a Lovelace dashboard on your behalf — the mechanism that
-exists is an undocumented internal of the `lovelace` component with a
-known bug that can silently wipe existing dashboard data if used
-incorrectly. Rather than risk that, the integration copies the dashboard
-YAML into your config directory for you and leaves the one-click "Add
-Dashboard from YAML" step to you. Blueprints don't have this problem —
-they're just files Home Assistant reads from disk, so copying the file
-*is* the whole installation.
+**How do I get the dashboard into my sidebar?**
+The dashboard is opt-in but automatic: **Settings > Devices & Services >
+Smart EV Charging > ⋮ > Options > Install or update the dashboard**. This
+registers the bundled native dashboard as a sidebar tab and refreshes it on
+each Home Assistant start (as long as it stays installed). Installing it is
+safe — it uses the same storage-mode Lovelace registration the blueprints
+and `frontend` component use for native dashboards, so it never touches
+your other dashboards' data. Blueprints are different — they're just
+files Home Assistant reads from disk, so they install the moment the file
+lands in the blueprints directory.
 
 ---
 

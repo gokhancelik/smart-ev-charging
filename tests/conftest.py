@@ -108,6 +108,9 @@ class OptionsFlow:
     def async_show_form(self, step_id, data_schema=None):
         return {"type": "form", "step_id": step_id, "data_schema": data_schema}
 
+    def async_show_menu(self, step_id, menu_options):
+        return {"type": "menu", "step_id": step_id, "menu_options": menu_options}
+
     def async_create_entry(self, title, data):
         return {"type": "create_entry", "title": title, "data": data}
 
@@ -133,6 +136,7 @@ def _install_ha_stubs() -> None:
     ha_core.callback = callback
     ha_core.Event = type("Event", (), {})
     ha_core.EventStateChangedData = type("EventStateChangedData", (), {})
+    ha_core.ServiceCall = type("ServiceCall", (), {})
 
     ha_ce = _module("homeassistant.config_entries")
     ha_ce.ConfigEntry = ConfigEntry
