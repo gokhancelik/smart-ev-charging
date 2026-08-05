@@ -5,6 +5,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.3] - 2026-08-05
+
+### Changed
+
+- Added verbose `debug` logging to the "Status sensor states" config-flow
+  pickers (source entity, resolved possible states, and which fields make
+  it into the schema). Turn on debug logging for
+  `custom_components.smart_ev_charging` while re-running the config flow
+  to diagnose why the matching-states picker isn't showing.
+
 ## [1.4.2] - 2026-08-05
 
 ### Fixed

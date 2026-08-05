@@ -20,6 +20,8 @@ only one config entry is allowed.
 
 from __future__ import annotations
 
+import logging
+
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -39,6 +41,8 @@ from .const import (
     CONF_VEHICLE_CONNECTED_STATES,
     DOMAIN,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 # (matching-states config key, source entity config key) pairings that need a
 # state picker whenever their source isn't a plain binary_sensor.
@@ -102,6 +106,9 @@ def _entity_state_options(hass: HomeAssistant, entity_id: str) -> list[str]:
     user type any state.
     """
     state_obj = hass.states.get(entity_id)
+    _LOGGER.debug("status states: source=%s state=%r attrs=%r", entity_id,
+                  state_obj.state if state_obj else None,
+                  state_obj.attributes if state_obj else None)
     if state_obj is None:
         return []
 
@@ -123,6 +130,7 @@ def _entity_state_options(hass: HomeAssistant, entity_id: str) -> list[str]:
         if value not in seen:
             seen.add(value)
             unique.append(value)
+    _LOGGER.debug("status states: options for %s = %s", entity_id, unique)
     return unique
 
 
@@ -139,10 +147,16 @@ def _build_states_schema(
     Returns None when neither source entity needs a picker.
     """
     fields: dict = {}
+    state_keys: list[str] = []
     for field_key, source_key in STATUS_SOURCE_FIELDS:
         source = captured.get(source_key)
+        _LOGGER.debug(
+            "status states: field=%s source=%s non_binary=%s",
+            field_key, source, _is_non_binary_source(source),
+        )
         if not _is_non_binary_source(source):
             continue
+        state_keys.append(field_key)
         fields[
             vol.Optional(
                 field_key,
@@ -158,6 +172,7 @@ def _build_states_schema(
                 }
             }
         )
+    _LOGGER.debug("status states: schema fields = %s", state_keys)
     return vol.Schema(fields) if fields else None
 
 
@@ -170,6 +185,10 @@ class SmartEvChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle the initial setup flow."""
 
     VERSION = 1
+
+    def __init__(self) -> None:
+        super().__init__()
+        _LOGGER.debug("Smart EV Charging config flow starting")
 
     async def async_step_user(
         self, user_input: dict | None = None
