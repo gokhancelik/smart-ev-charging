@@ -5,6 +5,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.6] - 2026-08-05
+
+### Fixed
+
+- The integration's logo is now visible in Home Assistant's store and the
+  Devices & Services integration list. The `brand/` folder only shipped
+  `logo.png`/`logo@2x.png`, but the storefront and integration list render
+  the square **icon** image — which was missing — so nothing appeared.
+  Added `icon.png` (256x256) and `icon@2x.png` (512x512), rasterized from
+  the same square source art. Works with HA 2026.3+ (local brand images).
+
 ## [1.4.5] - 2026-08-05
 
 ### Fixed
