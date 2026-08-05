@@ -36,9 +36,11 @@ from .const import (
 UNAVAILABLE_STATES = ("unknown", "unavailable")
 
 
-def _parse_on_states(raw: str | None) -> list[str]:
+def _parse_on_states(raw: str | list[str] | None) -> list[str]:
     if not raw:
         return []
+    if isinstance(raw, list):
+        return [str(part).strip().lower() for part in raw if str(part).strip()]
     return [part.strip().lower() for part in raw.split(",") if part.strip()]
 
 

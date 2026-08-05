@@ -12,7 +12,7 @@ vehicle_connected and charging_active accept either a proper binary_sensor
 (the common case) or a text/enum status sensor (e.g. Easee's charger
 status, which reports strings like "Charging", "Completed", "Car
 disconnected" instead of a boolean) paired with a "which states count as
-on" list — see vehicle_connected_states / charging_active_states.
+on" picker — see vehicle_connected_states / charging_active_states.
 
 Single-vehicle by design, matching the rest of the package (see README FAQ):
 only one config entry is allowed.
@@ -40,16 +40,20 @@ from .const import (
     DOMAIN,
 )
 
+# (matching-states config key, source entity config key) pairings that need a
+# state picker whenever their source isn't a plain binary_sensor.
+STATUS_SOURCE_FIELDS = (
+    (CONF_VEHICLE_CONNECTED_STATES, CONF_VEHICLE_CONNECTED),
+    (CONF_CHARGING_ACTIVE_STATES, CONF_CHARGING_ACTIVE),
+)
+
 
 def _entity_selector(domain: str | list[str]) -> selector.Selector:
     return selector.selector({"entity": {"domain": domain}})
 
 
-def _text_selector() -> selector.Selector:
-    return selector.selector({"text": {}})
-
-
-def _build_schema(current: dict) -> vol.Schema:
+def _build_entity_schema(current: dict) -> vol.Schema:
+    """Entity pickers only — the status matching-states fields come later."""
     fields: dict = {}
 
     def required_entity(key: str, domain: str | list[str]) -> None:
@@ -61,15 +65,8 @@ def _build_schema(current: dict) -> vol.Schema:
             vol.Optional(key, description={"suggested_value": current.get(key)})
         ] = _entity_selector(domain)
 
-    def optional_text(key: str) -> None:
-        fields[
-            vol.Optional(key, description={"suggested_value": current.get(key)})
-        ] = _text_selector()
-
     required_entity(CONF_VEHICLE_CONNECTED, ["binary_sensor", "sensor"])
-    optional_text(CONF_VEHICLE_CONNECTED_STATES)
     required_entity(CONF_CHARGING_ACTIVE, ["binary_sensor", "sensor"])
-    optional_text(CONF_CHARGING_ACTIVE_STATES)
     required_entity(CONF_PRICE, "sensor")
     required_entity(CONF_CHEAP_PRICE, "binary_sensor")
     optional_entity(CONF_BATTERY, "sensor")
@@ -80,8 +77,44 @@ def _build_schema(current: dict) -> vol.Schema:
     return vol.Schema(fields)
 
 
+def _is_non_binary_source(entity_id: str) -> bool:
+    """Only sources that aren't plain binary_sensors need a matching-states list."""
+    return bool(entity_id) and entity_id.split(".", 1)[0] != "binary_sensor"
+
+
+def _current_states_list(current: dict, key: str) -> list[str] | None:
+    """Normalise a stored comma-string/list states value to a list for the picker."""
+    value = current.get(key)
+    if not value:
+        return None
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    return [part.strip() for part in str(value).split(",") if part.strip()] or None
+
+
+def _build_states_schema(captured: dict) -> vol.Schema | None:
+    """Build a schema of multi-select state pickers for non-binary status sources.
+
+    Returns None when neither source entity needs a picker.
+    """
+    fields: dict = {}
+    for field_key, source_key in STATUS_SOURCE_FIELDS:
+        source = captured.get(source_key)
+        if not _is_non_binary_source(source):
+            continue
+        fields[
+            vol.Optional(
+                field_key,
+                default=_current_states_list(captured, field_key),
+            )
+        ] = selector.selector(
+            {"state": {"entity_id": source, "multiple": True}}
+        )
+    return vol.Schema(fields) if fields else None
+
+
 def _clean(user_input: dict) -> dict:
-    """Drop empty/cleared optional selections instead of storing them as ''."""
+    """Drop empty/cleared optional selections instead of storing them as '' or []."""
     return {k: v for k, v in user_input.items() if v}
 
 
@@ -97,11 +130,28 @@ class SmartEvChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="single_instance_allowed")
 
         if user_input is not None:
+            if schema := _build_states_schema(user_input):
+                self._captured = user_input
+                return self.async_show_form(step_id="states", data_schema=schema)
             return self.async_create_entry(
                 title="Smart EV Charging", data=_clean(user_input)
             )
 
-        return self.async_show_form(step_id="user", data_schema=_build_schema({}))
+        return self.async_show_form(
+            step_id="user", data_schema=_build_entity_schema({})
+        )
+
+    async def async_step_states(
+        self, user_input: dict | None = None
+    ) -> config_entries.ConfigFlowResult:
+        captured = dict(self._captured)
+        if user_input is not None:
+            merged = _clean({**captured, **user_input})
+            return self.async_create_entry(title="Smart EV Charging", data=merged)
+
+        return self.async_show_form(
+            step_id="states", data_schema=_build_states_schema(captured)
+        )
 
     @staticmethod
     @callback
@@ -118,7 +168,24 @@ class SmartEvChargingOptionsFlow(config_entries.OptionsFlow):
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
         if user_input is not None:
+            if schema := _build_states_schema(user_input):
+                self._captured = user_input
+                return self.async_show_form(step_id="states", data_schema=schema)
             return self.async_create_entry(title="", data=_clean(user_input))
 
         current = {**self.config_entry.data, **self.config_entry.options}
-        return self.async_show_form(step_id="init", data_schema=_build_schema(current))
+        return self.async_show_form(
+            step_id="init", data_schema=_build_entity_schema(current)
+        )
+
+    async def async_step_states(
+        self, user_input: dict | None = None
+    ) -> config_entries.ConfigFlowResult:
+        captured = dict(self._captured)
+        if user_input is not None:
+            merged = _clean({**captured, **user_input})
+            return self.async_create_entry(title="", data=merged)
+
+        return self.async_show_form(
+            step_id="states", data_schema=_build_states_schema(captured)
+        )

@@ -5,6 +5,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-08-05
+
+### Changed
+
+- The config flow's "matching states" fields for the `Vehicle connected`
+  and `Charging active` sources are now a proper picker instead of a
+  free-text comma-separated box. When you pick a status sensor (anything
+  that isn't a plain `binary_sensor`), the flow continues to a new
+  "Status sensor states" screen whose multi-select pickers list the states
+  that source sensor can actually report — just tick the ones that count
+  as active. No more hand-typing (or mistyping) state strings. Existing
+  comma-separated values remain fully supported (stored data is unchanged,
+  and `_parse_on_states` still accepts the legacy format), so no
+  reconfiguration is needed for already-configured installs.
+
 ## [1.3.2] - 2026-08-05
 
 ### Fixed

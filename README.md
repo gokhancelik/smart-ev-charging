@@ -6,7 +6,7 @@ level is reached. Works with *any* EV/charger integration — you point it at
 your existing vehicle/charger/price entities once, through a normal
 Home Assistant config flow; a package and blueprint do the rest.
 
-![version](https://img.shields.io/badge/version-1.3.2-blue)
+![version](https://img.shields.io/badge/version-1.4.0-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ---
@@ -127,9 +127,7 @@ Tibber, …):
 | Field | Required | Example |
 |---|---|---|
 | Vehicle connected | ✅ | `binary_sensor.charger_cable_connected` |
-| Vehicle connected — matching states | optional | `Charging, Completed, Awaiting Start` |
 | Charging active | ✅ | `binary_sensor.charger_charging` |
-| Charging active — matching states | optional | `Charging` |
 | Current electricity price | ✅ | `sensor.nordpool_kwh_price` |
 | Cheap electricity | ✅ | `binary_sensor.price_is_cheap` |
 | Battery percentage | optional | `sensor.car_battery_level` |
@@ -148,17 +146,20 @@ of re-adding it.
 some OCPP/go-eCharger/Wallbox setups) commonly expose a single text status
 sensor instead — e.g. Easee's charger status reports `Charging`,
 `Completed`, `Car disconnected`, `Awaiting Start`, etc. Point "Vehicle
-connected" and "Charging active" at that same status sensor, then fill in
-the matching "matching states" field with a comma-separated list of which
-raw values count as on for that concept:
+connected" and "Charging active" at that same status sensor. Whenever you
+pick a status sensor (i.e. anything that isn't a plain `binary_sensor`),
+the flow moves on to a **"Status sensor states"** screen with a picker for
+each one — tick which raw states count as on for that concept (you can
+select several):
 
-- Vehicle connected — matching states: `Charging, Completed, Awaiting Start, Ready to Charge`
+- Vehicle connected — matching states: `Charging`, `Completed`, `Awaiting Start`, `Ready to Charge`
   (anything that isn't `Car disconnected`/`Disconnected`)
 - Charging active — matching states: `Charging`
 
-Leave both "matching states" fields empty if your source is a real
-binary_sensor — the integration then falls back to plain on/off, unchanged
-from before.
+The picker lists the states your status sensor can actually report, so you
+don't need to type (or mistype) them by hand. Leave it empty if your source
+is a real binary_sensor — the integration then falls back to plain on/off,
+unchanged from before.
 
 The integration exposes what you picked under stable entity IDs
 (`binary_sensor.ev_vehicle_connected`, `binary_sensor.ev_charging_active`,
@@ -317,9 +318,9 @@ Configure).
 **My charger (e.g. Easee) only exposes one status sensor, not separate
 "connected"/"charging" binary sensors — do I need to write a template?**
 No. Point "Vehicle connected" and "Charging active" at that same status
-sensor and fill in the matching "matching states" field (comma-separated
-raw values that count as on for that concept) — see
-[Configuration](#configuration). No template YAML needed.
+sensor; the config flow then shows a "Status sensor states" screen where
+you tick which raw values count as on for that concept (see
+[Configuration](#configuration)). No template YAML needed.
 
 **Can I send notifications to more than one phone?**
 Yes — the blueprint's "Notify Devices" field accepts multiple devices.
@@ -361,7 +362,7 @@ they're just files Home Assistant reads from disk, so copying the file
 | Scripts fail with "not found" | `configuration.yaml` is missing the `script: !include_dir_merge_named scripts` include |
 | `sensor.ev_battery_percentage` / `sensor.ev_charging_power` / `sensor.ev_energy_meter` don't exist | That field was left empty in the integration's config flow — expected, it's optional |
 | `binary_sensor.ev_vehicle_connected` etc. show "unavailable" | The source entity picked in the integration's config flow is itself unavailable — check it directly |
-| `binary_sensor.ev_vehicle_connected`/`ev_charging_active` never turn on, even though the source status sensor changes | The "matching states" field doesn't match your source sensor's actual values — open the source entity's state history and copy the exact text (matching is case-insensitive, but must otherwise match exactly) |
+| `binary_sensor.ev_vehicle_connected`/`ev_charging_active` never turn on, even though the source status sensor changes | No "matching states" were marked for that source in the config flow's "Status sensor states" screen, or the ticked values don't match your source sensor's actual ones — re-open Configure and pick the exact states (matching is case-insensitive, but must otherwise match exactly) |
 | Notifications never arrive | Confirm the device is still listed under Settings > Devices & Services > Mobile App, and that it's actually selected in the blueprint's "Notify Devices" field |
 | Blueprint's "Notify Devices" field is empty or missing | Your Home Assistant version is older than 2026.5 — this field needs mobile_app notify entities, which didn't exist before that release |
 | "Charge now"/"Stop charging" notification buttons do nothing | Confirm the Companion App has notification permissions and background access; check `input_text.ev_last_notification_action` in the Debug dashboard section to see if the event even arrived |

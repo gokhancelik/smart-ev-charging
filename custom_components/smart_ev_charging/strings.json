@@ -6,9 +6,7 @@
         "description": "Point Smart EV Charging at the entities exposed by your vehicle/charger and price integrations. Required fields must belong to the domain shown; optional fields can be left empty.",
         "data": {
           "vehicle_connected": "Vehicle connected (binary_sensor or status sensor)",
-          "vehicle_connected_states": "Vehicle connected — matching states (optional)",
           "charging_active": "Charging active (binary_sensor or status sensor)",
-          "charging_active_states": "Charging active — matching states (optional)",
           "price": "Current electricity price (sensor)",
           "cheap_price": "Cheap electricity (binary_sensor)",
           "battery": "Battery percentage (optional, sensor)",
@@ -17,16 +15,26 @@
           "departure_calendar": "Departure calendar (optional, calendar)"
         },
         "data_description": {
-          "vehicle_connected": "Turns on when the charging cable is plugged in. Determines when Smart EV Charging starts waiting for a cheap price. Can be a proper binary_sensor, or a text status sensor (e.g. Easee's charger status) paired with the 'matching states' field below.",
-          "vehicle_connected_states": "Only needed if 'Vehicle connected' is a text/status sensor rather than a binary_sensor. Comma-separated list of state values that mean the cable is plugged in, e.g. \"Charging, Completed, Awaiting Start\" for an Easee charger. Leave empty to treat the source as a normal binary_sensor (on/off).",
-          "charging_active": "Turns on only while the vehicle is actually drawing power. Used to detect when a charging session really starts and stops. Can be a proper binary_sensor, or a text status sensor paired with the 'matching states' field below.",
-          "charging_active_states": "Only needed if 'Charging active' is a text/status sensor. Comma-separated list of state values that mean the vehicle is actively charging, e.g. \"Charging\" for an Easee charger. Leave empty to treat the source as a normal binary_sensor (on/off).",
+          "vehicle_connected": "Turns on when the charging cable is plugged in. Determines when Smart EV Charging starts waiting for a cheap price. Can be a proper binary_sensor, or a text status sensor (e.g. Easee's charger status). If you pick a status sensor you'll be asked which of its states mean 'plugged in' on the next screen.",
+          "charging_active": "Turns on only while the vehicle is actually drawing power. Used to detect when a charging session really starts and stops. Can be a proper binary_sensor, or a text status sensor. If you pick a status sensor you'll be asked which of its states mean 'charging' on the next screen.",
           "price": "Your current electricity price. Shown in notifications and used to calculate session cost.",
           "cheap_price": "Turns on when electricity is currently considered cheap (from your price integration, e.g. Nordpool or Tibber, or your own threshold template). Charging starts automatically while this is on.",
           "battery": "The vehicle's state of charge in percent. Enables the stop-at-target-battery-% and low-battery-emergency features, and battery readouts in notifications and dashboards.",
           "power": "Current charging power (e.g. kW). Shown in notifications and dashboards; not required for any charging decision.",
           "energy": "Cumulative energy delivered by the charger, in kWh. Used to calculate energy delivered and cost for the current session.",
           "departure_calendar": "A calendar whose next event start time is treated as your departure deadline — charging is forced on if the cheap price hasn't arrived in time. Leave empty to use a fixed daily departure time instead (set via the input_datetime.ev_departure_time helper)."
+        }
+      },
+      "states": {
+        "title": "Status sensor states",
+        "description": "Your 'Vehicle connected'/'Charging active' source is a status sensor rather than a binary_sensor. Choose which of its states mean the cable is plugged in / the vehicle is actively charging. Select the states that should count as active — you can pick several.",
+        "data": {
+          "vehicle_connected_states": "Vehicle connected — matching states",
+          "charging_active_states": "Charging active — matching states"
+        },
+        "data_description": {
+          "vehicle_connected_states": "State values of your status sensor that mean the cable is plugged in, e.g. \"Charging\", \"Completed\", \"Awaiting Start\" for an Easee charger. Matching is case-insensitive.",
+          "charging_active_states": "State values of your status sensor that mean the vehicle is actively drawing power, e.g. \"Charging\" for an Easee charger. Matching is case-insensitive."
         }
       }
     },
@@ -41,9 +49,7 @@
         "description": "Change the entities Smart EV Charging is pointed at.",
         "data": {
           "vehicle_connected": "Vehicle connected (binary_sensor or status sensor)",
-          "vehicle_connected_states": "Vehicle connected — matching states (optional)",
           "charging_active": "Charging active (binary_sensor or status sensor)",
-          "charging_active_states": "Charging active — matching states (optional)",
           "price": "Current electricity price (sensor)",
           "cheap_price": "Cheap electricity (binary_sensor)",
           "battery": "Battery percentage (optional, sensor)",
@@ -52,16 +58,26 @@
           "departure_calendar": "Departure calendar (optional, calendar)"
         },
         "data_description": {
-          "vehicle_connected": "Turns on when the charging cable is plugged in. Can be a proper binary_sensor, or a text status sensor (e.g. Easee's charger status) paired with the 'matching states' field below.",
-          "vehicle_connected_states": "Only needed if 'Vehicle connected' is a text/status sensor. Comma-separated list of state values that mean the cable is plugged in, e.g. \"Charging, Completed, Awaiting Start\". Leave empty to treat the source as a normal binary_sensor (on/off).",
-          "charging_active": "Turns on only while the vehicle is actually drawing power. Can be a proper binary_sensor, or a text status sensor paired with the 'matching states' field below.",
-          "charging_active_states": "Only needed if 'Charging active' is a text/status sensor. Comma-separated list of state values that mean the vehicle is actively charging, e.g. \"Charging\". Leave empty to treat the source as a normal binary_sensor (on/off).",
+          "vehicle_connected": "Turns on when the charging cable is plugged in. Can be a proper binary_sensor, or a text status sensor (e.g. Easee's charger status). If you pick a status sensor you'll be asked which of its states mean 'plugged in' on the next screen.",
+          "charging_active": "Turns on only while the vehicle is actually drawing power. Can be a proper binary_sensor, or a text status sensor. If you pick a status sensor you'll be asked which of its states mean 'charging' on the next screen.",
           "price": "Your current electricity price. Shown in notifications and used to calculate session cost.",
           "cheap_price": "Turns on when electricity is currently considered cheap. Charging starts automatically while this is on.",
           "battery": "The vehicle's state of charge in percent. Enables the stop-at-target-battery-% and low-battery-emergency features, and battery readouts in notifications and dashboards.",
           "power": "Current charging power (e.g. kW). Shown in notifications and dashboards; not required for any charging decision.",
           "energy": "Cumulative energy delivered by the charger, in kWh. Used to calculate energy delivered and cost for the current session.",
           "departure_calendar": "A calendar whose next event start time is treated as your departure deadline. Leave empty to use a fixed daily departure time instead (set via the input_datetime.ev_departure_time helper)."
+        }
+      },
+      "states": {
+        "title": "Status sensor states",
+        "description": "Your 'Vehicle connected'/'Charging active' source is a status sensor rather than a binary_sensor. Choose which of its states mean the cable is plugged in / the vehicle is actively charging. Select the states that should count as active — you can pick several.",
+        "data": {
+          "vehicle_connected_states": "Vehicle connected — matching states",
+          "charging_active_states": "Charging active — matching states"
+        },
+        "data_description": {
+          "vehicle_connected_states": "State values of your status sensor that mean the cable is plugged in. Matching is case-insensitive.",
+          "charging_active_states": "State values of your status sensor that mean the vehicle is actively drawing power. Matching is case-insensitive."
         }
       }
     }
