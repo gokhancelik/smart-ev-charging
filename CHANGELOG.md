@@ -5,6 +5,20 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.2] - 2026-08-05
+
+### Fixed
+
+- The blueprint's inline `start_charging_action`/`stop_charging_action`
+  steps were written as `- !input start_charging_action` directly inside a
+  `sequence`. An `action`-selector input resolves to a *list* of action
+  steps, so splicing it in as a list element produced a nested list, and
+  "Create Automation from blueprint" failed with `Message malformed:
+  expected dictionary @ data['actions'][0]['choose'][...]['sequence'][1]`.
+  The input is now expanded through an empty `choose` whose `default` is the
+  input (e.g. `- choose:` / `  default: !input start_charging_action`),
+  which flattens the action list back into the surrounding sequence.
+
 ## [1.3.1] - 2026-08-05
 
 ### Fixed
