@@ -21,12 +21,20 @@ only one config entry is allowed.
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 
 import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import selector
+
+try:
+    from homeassistant.components import recorder as recorder_component
+    from homeassistant.components.recorder import get_instance as get_recorder
+except ImportError:  # pragma: no cover - older HA where recorder isn't importable
+    recorder_component = None
+    get_recorder = None
 
 from .const import (
     CONF_BATTERY,
@@ -96,33 +104,41 @@ def _current_states_list(current: dict, key: str) -> list[str] | None:
     return [part.strip() for part in str(value).split(",") if part.strip()] or None
 
 
-def _entity_state_options(hass: HomeAssistant, entity_id: str) -> list[str]:
+def _entity_state_options(
+    hass: HomeAssistant, entity_id: str, history: list[str] | None = None
+) -> list[str]:
     """Best-effort list of the source entity's possible state values.
 
-    Only enum device-class sensors expose a real ``options`` list; for a
-    plain text status sensor the best guesses are its ``options``/state
-    attributes (from a `select` helper or template) plus its current
-    state. Empty is fine — `custom_value` on the selector still lets the
-    user type any state.
+    Sources, in priority order: the ``options`` or ``current_option`` attributes
+    (from a `select` helper or enum sensor), the current state, then any recorded
+    history values (from the recorder). Distinct values are de-duplicated,
+    preserving first-seen order. Empty is fine — `custom_value` on the
+    selector still lets the user type any state.
     """
     state_obj = hass.states.get(entity_id)
-    _LOGGER.debug("status states: source=%s state=%r attrs=%r", entity_id,
-                  state_obj.state if state_obj else None,
-                  state_obj.attributes if state_obj else None)
-    if state_obj is None:
-        return []
+    _LOGGER.debug(
+        "status states: source=%s state=%r attrs=%r",
+        entity_id,
+        state_obj.state if state_obj else None,
+        state_obj.attributes if state_obj else None,
+    )
 
     candidates: list[str] = []
-    for attr_name in ("options", "current_option"):
-        value = state_obj.attributes.get(attr_name)
-        if isinstance(value, list):
-            candidates.extend(str(item) for item in value if str(item))
-        elif isinstance(value, str) and value:
-            candidates.append(value)
+    if state_obj is not None:
+        for attr_name in ("options", "current_option"):
+            value = state_obj.attributes.get(attr_name)
+            if isinstance(value, list):
+                candidates.extend(str(item) for item in value if str(item))
+            elif isinstance(value, str) and value:
+                candidates.append(value)
 
-    current = state_obj.state
-    if current and current not in ("unknown", "unavailable"):
-        candidates.append(current)
+        current = state_obj.state
+        if current not in ("unknown", "unavailable"):
+            candidates.append(current)
+
+    for value in history or []:
+        if value:
+            candidates.append(value)
 
     seen: set[str] = set()
     unique: list[str] = []
@@ -135,7 +151,7 @@ def _entity_state_options(hass: HomeAssistant, entity_id: str) -> list[str]:
 
 
 def _build_states_schema(
-    hass: HomeAssistant, captured: dict
+    hass: HomeAssistant, captured: dict, history: dict[str, list[str]] | None = None
 ) -> vol.Schema | None:
     """Build a schema of multi-select state pickers for non-binary status sources.
 
@@ -143,6 +159,10 @@ def _build_states_schema(
     the ``state`` selector can't show a list for a plain text sensor that
     isn't `device_class: enum`. `custom_value` lets unrecognised states be
     typed as well as picked from the source's known values.
+
+    ``history`` maps a source entity id to values taken from its recorded
+    history, so the picker can offer every state the sensor has ever shown
+    (not just the current one).
 
     Returns None when neither source entity needs a picker.
     """
@@ -168,7 +188,9 @@ def _build_states_schema(
                     "multiple": True,
                     "custom_value": True,
                     "mode": "dropdown",
-                    "options": _entity_state_options(hass, source),
+                    "options": _entity_state_options(
+                        hass, source, (history or {}).get(source)
+                    ),
                 }
             }
         )
@@ -176,9 +198,65 @@ def _build_states_schema(
     return vol.Schema(fields) if fields else None
 
 
+async def _async_entity_state_history(
+    hass: HomeAssistant, entity_id: str, days: int = 30
+) -> list[str]:
+    """Distinct recorded state values for an entity from the recorder.
+
+    Best effort: returns [] if the recorder isn't available, the entity has
+    no history, or recording is disabled for it. Never raises.
+    """
+    if get_recorder is None or recorder_component is None:
+        return []
+    try:
+        instance = get_recorder(hass)
+        # get_significant_states is blocking; run it on the recorder's own
+        # executor so we never stall the event loop.
+        from homeassistant.components.recorder import history as recorder_history
+
+        start = _utc_now() - timedelta(days=days)
+        rows = await instance.async_add_executor_job(
+            recorder_history.get_significant_states,
+            hass,
+            start,
+            None,
+            [entity_id],
+        )
+    except Exception as exc:  # noqa: BLE001 - degrade, don't break the flow
+        _LOGGER.debug("status states: no history for %s (%s)", entity_id, exc)
+        return []
+
+    values: list[str] = []
+    seen: set[str] = set()
+    for lazy_state in rows.get(entity_id, []):
+        value = getattr(lazy_state, "state", None)
+        if value and value not in ("unknown", "unavailable") and value not in seen:
+            seen.add(value)
+            values.append(value)
+    return values
+
+
+def _utc_now():
+    from homeassistant.util.dt import utcnow
+
+    return utcnow()
+
+
 def _clean(user_input: dict) -> dict:
     """Drop empty/cleared optional selections instead of storing them as '' or []."""
     return {k: v for k, v in user_input.items() if v}
+
+
+async def _analyze_state_history(
+    hass: HomeAssistant, captured: dict
+) -> dict[str, list[str]]:
+    """Gather recorded state history for every non-binary status source."""
+    history: dict[str, list[str]] = {}
+    for _field_key, source_key in STATUS_SOURCE_FIELDS:
+        source = captured.get(source_key)
+        if source and _is_non_binary_source(source):
+            history[source] = await _async_entity_state_history(hass, source)
+    return history
 
 
 class SmartEvChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -197,13 +275,20 @@ class SmartEvChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="single_instance_allowed")
 
         if user_input is not None:
-            if schema := _build_states_schema(self.hass, user_input):
+            if _build_states_schema(self.hass, user_input):
                 self._captured = user_input
-                return self.async_show_form(step_id="states", data_schema=schema)
+                self._history = await _analyze_state_history(self.hass, user_input)
+                return self.async_show_form(
+                    step_id="states",
+                    data_schema=_build_states_schema(
+                        self.hass, user_input, self._history
+                    ),
+                )
             return self.async_create_entry(
                 title="Smart EV Charging", data=_clean(user_input)
             )
 
+        self._history = {}
         return self.async_show_form(
             step_id="user", data_schema=_build_entity_schema({})
         )
@@ -216,8 +301,10 @@ class SmartEvChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             merged = _clean({**captured, **user_input})
             return self.async_create_entry(title="Smart EV Charging", data=merged)
 
+        history = self._history or await _analyze_state_history(self.hass, captured)
         return self.async_show_form(
-            step_id="states", data_schema=_build_states_schema(self.hass, captured)
+            step_id="states",
+            data_schema=_build_states_schema(self.hass, captured, history),
         )
 
     @staticmethod
@@ -231,14 +318,30 @@ class SmartEvChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class SmartEvChargingOptionsFlow(config_entries.OptionsFlow):
     """Let the user change the configured entities after setup."""
 
+    def __init__(self) -> None:
+        super().__init__()
+        self._captured: dict | None = None
+        self._history: dict[str, list[str]] = {}
+
     async def async_step_init(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
         if user_input is not None:
-            if schema := _build_states_schema(self.hass, user_input):
-                self._captured = user_input
-                return self.async_show_form(step_id="states", data_schema=schema)
-            return self.async_create_entry(title="", data=_clean(user_input))
+            # The init schema only contains entity pickers, so the submitted
+            # user_input has no *_states keys. Carry the stored ones across so
+            # the previously selected values stay pre-filled on reconfigure.
+            stored = {**self.config_entry.data, **self.config_entry.options}
+            captured = {**stored, **user_input}
+            if _build_states_schema(self.hass, captured):
+                self._captured = captured
+                self._history = await _analyze_state_history(self.hass, captured)
+                return self.async_show_form(
+                    step_id="states",
+                    data_schema=_build_states_schema(
+                        self.hass, captured, self._history
+                    ),
+                )
+            return self.async_create_entry(title="", data=_clean(captured))
 
         current = {**self.config_entry.data, **self.config_entry.options}
         return self.async_show_form(
@@ -253,6 +356,8 @@ class SmartEvChargingOptionsFlow(config_entries.OptionsFlow):
             merged = _clean({**captured, **user_input})
             return self.async_create_entry(title="", data=merged)
 
+        history = self._history or await _analyze_state_history(self.hass, captured)
         return self.async_show_form(
-            step_id="states", data_schema=_build_states_schema(self.hass, captured)
+            step_id="states",
+            data_schema=_build_states_schema(self.hass, captured, history),
         )

@@ -5,6 +5,28 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.5] - 2026-08-05
+
+### Fixed
+
+- Reconfiguring the integration no longer forgets the states you selected
+  in the "Status sensor states" step. The options flow only re-collects
+  the entity pickers on its first step, so the previously saved
+  matching-states values were dropped from the schema defaults — they are
+  now carried over and stay pre-selected.
+
+## [1.4.4] - 2026-08-05
+
+### Fixed
+
+- The "Status sensor states" picker now lists every state the source
+  sensor has ever recorded (from its Home Assistant history), instead of
+  only its current value. For a plain text status sensor — which exposes
+  no `options` attribute — this previously meant the picker showed a
+  single (current) value. History is gathered best-effort; if the recorder
+  is unavailable or the entity is unrecorded, the picker falls back to the
+  current state and still allows typing any value.
+
 ## [1.4.3] - 2026-08-05
 
 ### Added

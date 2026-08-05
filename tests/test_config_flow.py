@@ -122,6 +122,20 @@ def test_entity_state_options_ignores_unknown_state(hass, add_state):
     assert _entity_state_options(hass, "sensor.charger") == ["Charging", "Idle"]
 
 
+def test_entity_state_options_merges_history_after_current(hass, add_state):
+    add_state("sensor.charger", "Disconnected")
+    history = ["Disconnected", "Charging", "Completed", "Disconnected"]
+    assert _entity_state_options(hass, "sensor.charger", history) == [
+        "Disconnected",
+        "Charging",
+        "Completed",
+    ]
+
+
+def test_entity_state_options_history_when_no_state(hass):
+    assert _entity_state_options(hass, "sensor.charger", ["A", "B"]) == ["A", "B"]
+
+
 # ------------------------------------------------------------------ _build_states_schema
 
 
@@ -169,6 +183,20 @@ def test_build_states_schema_options_filled(hass, add_state):
     assert validator.config["select"]["options"] == ["Charging", "Idle"]
 
 
+def test_build_states_schema_includes_history_options(hass, add_state):
+    add_state("sensor.charger_status", "Idle")
+    captured = {
+        "vehicle_connected": "sensor.charger_status",
+        "charging_active": "binary_sensor.charging_active",
+    }
+    result = _build_states_schema(
+        hass, captured, {"sensor.charger_status": ["Charging", "Completed"]}
+    )
+    validator = result.schema[CONF_VEHICLE_CONNECTED_STATES]
+    # current state + history, de-duplicated, current first
+    assert validator.config["select"]["options"] == ["Idle", "Charging", "Completed"]
+
+
 # ----------------------------------------------------------------- flow integration
 
 
@@ -189,3 +217,39 @@ def test_async_step_user_sensor_source_leads_to_states_step(hass):
 
 def test_clean_drops_empty_values():
     assert _clean({"a": "x", "b": "", "c": [], "d": None}) == {"a": "x"}
+
+
+def test_options_flow_preserves_stored_states_as_defaults(hass):
+    """Reconfiguring keeps previously-selected states pre-filled in the states schema."""
+    from custom_components.smart_ev_charging.config_flow import (
+        SmartEvChargingOptionsFlow,
+    )
+    from homeassistant.config_entries import ConfigEntry
+
+    flow = SmartEvChargingOptionsFlow()
+    flow.hass = hass
+    flow.config_entry = ConfigEntry(
+        data={
+            "vehicle_connected": "sensor.charger_status",
+            "charging_active": "binary_sensor.charging_active",
+        },
+        options={"vehicle_connected_states": ["Charging", "Completed"]},
+    )
+    result = _run(
+        flow.async_step_init(
+            {
+                "vehicle_connected": "sensor.charger_status",
+                "charging_active": "binary_sensor.charging_active",
+            }
+        )
+    )
+    assert result["type"] == "form"
+    assert result["step_id"] == "states"
+    field_keys = [k.schema for k in result["data_schema"].schema]
+    assert CONF_VEHICLE_CONNECTED_STATES in field_keys
+    assert CONF_CHARGING_ACTIVE_STATES not in field_keys
+    # previously saved values survive as the picker defaults
+    for key, _ in result["data_schema"].schema.items():
+        if key.schema == CONF_VEHICLE_CONNECTED_STATES:
+            default = key.default() if callable(key.default) else key.default
+            assert default == ["Charging", "Completed"]
