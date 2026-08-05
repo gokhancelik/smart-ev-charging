@@ -25,16 +25,16 @@
           "departure_calendar": "A calendar whose next event start time is treated as your departure deadline — charging is forced on if the cheap price hasn't arrived in time. Leave empty to use a fixed daily departure time instead (set via the input_datetime.ev_departure_time helper)."
         }
       },
-      "states": {
+"states": {
         "title": "Status sensor states",
-        "description": "Your 'Vehicle connected'/'Charging active' source is a status sensor rather than a binary_sensor. Choose which of its states mean the cable is plugged in / the vehicle is actively charging. Select the states that should count as active — you can pick several.",
+        "description": "Your 'Vehicle connected'/'Charging active' source is a status sensor rather than a binary_sensor. Choose which of its states mean the cable is plugged in / the vehicle is actively charging. Pick the states that should count as active — you can select several, and type one that isn't listed.",
         "data": {
           "vehicle_connected_states": "Vehicle connected — matching states",
           "charging_active_states": "Charging active — matching states"
         },
         "data_description": {
-          "vehicle_connected_states": "State values of your status sensor that mean the cable is plugged in, e.g. \"Charging\", \"Completed\", \"Awaiting Start\" for an Easee charger. Matching is case-insensitive.",
-          "charging_active_states": "State values of your status sensor that mean the vehicle is actively drawing power, e.g. \"Charging\" for an Easee charger. Matching is case-insensitive."
+          "vehicle_connected_states": "State values of your status sensor that mean the cable is plugged in. Matching is case-insensitive.",
+          "charging_active_states": "State values of your status sensor that mean the vehicle is actively drawing power. Matching is case-insensitive."
         }
       }
     },

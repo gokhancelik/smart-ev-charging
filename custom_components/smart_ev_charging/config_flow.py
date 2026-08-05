@@ -23,7 +23,7 @@ from __future__ import annotations
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import selector
 
 from .const import (
@@ -92,8 +92,49 @@ def _current_states_list(current: dict, key: str) -> list[str] | None:
     return [part.strip() for part in str(value).split(",") if part.strip()] or None
 
 
-def _build_states_schema(captured: dict) -> vol.Schema | None:
+def _entity_state_options(hass: HomeAssistant, entity_id: str) -> list[str]:
+    """Best-effort list of the source entity's possible state values.
+
+    Only enum device-class sensors expose a real ``options`` list; for a
+    plain text status sensor the best guesses are its ``options``/state
+    attributes (from a `select` helper or template) plus its current
+    state. Empty is fine — `custom_value` on the selector still lets the
+    user type any state.
+    """
+    state_obj = hass.states.get(entity_id)
+    if state_obj is None:
+        return []
+
+    candidates: list[str] = []
+    for attr_name in ("options", "current_option"):
+        value = state_obj.attributes.get(attr_name)
+        if isinstance(value, list):
+            candidates.extend(str(item) for item in value if str(item))
+        elif isinstance(value, str) and value:
+            candidates.append(value)
+
+    current = state_obj.state
+    if current and current not in ("unknown", "unavailable"):
+        candidates.append(current)
+
+    seen: set[str] = set()
+    unique: list[str] = []
+    for value in candidates:
+        if value not in seen:
+            seen.add(value)
+            unique.append(value)
+    return unique
+
+
+def _build_states_schema(
+    hass: HomeAssistant, captured: dict
+) -> vol.Schema | None:
     """Build a schema of multi-select state pickers for non-binary status sources.
+
+    Uses a `select` selector (rather than the ``state`` selector) because
+    the ``state`` selector can't show a list for a plain text sensor that
+    isn't `device_class: enum`. `custom_value` lets unrecognised states be
+    typed as well as picked from the source's known values.
 
     Returns None when neither source entity needs a picker.
     """
@@ -108,7 +149,14 @@ def _build_states_schema(captured: dict) -> vol.Schema | None:
                 default=_current_states_list(captured, field_key),
             )
         ] = selector.selector(
-            {"state": {"entity_id": source, "multiple": True}}
+            {
+                "select": {
+                    "multiple": True,
+                    "custom_value": True,
+                    "mode": "dropdown",
+                    "options": _entity_state_options(hass, source),
+                }
+            }
         )
     return vol.Schema(fields) if fields else None
 
@@ -130,7 +178,7 @@ class SmartEvChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="single_instance_allowed")
 
         if user_input is not None:
-            if schema := _build_states_schema(user_input):
+            if schema := _build_states_schema(self.hass, user_input):
                 self._captured = user_input
                 return self.async_show_form(step_id="states", data_schema=schema)
             return self.async_create_entry(
@@ -150,7 +198,7 @@ class SmartEvChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_create_entry(title="Smart EV Charging", data=merged)
 
         return self.async_show_form(
-            step_id="states", data_schema=_build_states_schema(captured)
+            step_id="states", data_schema=_build_states_schema(self.hass, captured)
         )
 
     @staticmethod
@@ -168,7 +216,7 @@ class SmartEvChargingOptionsFlow(config_entries.OptionsFlow):
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
         if user_input is not None:
-            if schema := _build_states_schema(user_input):
+            if schema := _build_states_schema(self.hass, user_input):
                 self._captured = user_input
                 return self.async_show_form(step_id="states", data_schema=schema)
             return self.async_create_entry(title="", data=_clean(user_input))
@@ -187,5 +235,5 @@ class SmartEvChargingOptionsFlow(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data=merged)
 
         return self.async_show_form(
-            step_id="states", data_schema=_build_states_schema(captured)
+            step_id="states", data_schema=_build_states_schema(self.hass, captured)
         )

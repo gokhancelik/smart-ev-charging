@@ -5,6 +5,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.2] - 2026-08-05
+
+### Fixed
+
+- The config flow's "Status sensor states" pickers were built with Home
+  Assistant's `state` selector, which only shows a list of choices for
+  `device_class: enum` sensors. For a plain text status sensor (e.g.
+  Easee's charger status) HA knows no possible states, so the picker
+  rendered as an empty/blank control — it looked like the "matching
+  states" field had vanished entirely. The pickers now use a `select`
+  selector (`multiple` + `custom_value`) pre-filled with the source
+  entity's known states (its `options` attribute if present, plus its
+  current state), and still let any unlisted state be typed. Existing
+  comma-separated or list values remain fully supported.
+
 ## [1.4.1] - 2026-08-05
 
 ### Fixed

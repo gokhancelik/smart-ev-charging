@@ -6,7 +6,7 @@ level is reached. Works with *any* EV/charger integration — you point it at
 your existing vehicle/charger/price entities once, through a normal
 Home Assistant config flow; a package and blueprint do the rest.
 
-![version](https://img.shields.io/badge/version-1.4.1-blue)
+![version](https://img.shields.io/badge/version-1.4.2-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ---
@@ -146,20 +146,20 @@ of re-adding it.
 some OCPP/go-eCharger/Wallbox setups) commonly expose a single text status
 sensor instead — e.g. Easee's charger status reports `Charging`,
 `Completed`, `Car disconnected`, `Awaiting Start`, etc. Point "Vehicle
-connected" and "Charging active" at that same status sensor. Whenever you
+Weekend charging active" at that same status sensor. Whenever you
 pick a status sensor (i.e. anything that isn't a plain `binary_sensor`),
 the flow moves on to a **"Status sensor states"** screen with a picker for
 each one — tick which raw states count as on for that concept (you can
-select several):
+select several, and a box is offered to type any state that isn't listed):
 
 - Vehicle connected — matching states: `Charging`, `Completed`, `Awaiting Start`, `Ready to Charge`
   (anything that isn't `Car disconnected`/`Disconnected`)
 - Charging active — matching states: `Charging`
 
-The picker lists the states your status sensor can actually report, so you
-don't need to type (or mistype) them by hand. Leave it empty if your source
-is a real binary_sensor — the integration then falls back to plain on/off,
-unchanged from before.
+The picker is pre-filled with the states your status sensor can actually
+report, so you don't need to type (or mistype) them by hand. Leave it empty
+if your source is a real binary_sensor — the integration then falls back to
+plain on/off, unchanged from before.
 
 The integration exposes what you picked under stable entity IDs
 (`binary_sensor.ev_vehicle_connected`, `binary_sensor.ev_charging_active`,
