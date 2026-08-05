@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.9] - 2026-08-06
+
+### Fixed
+
+- The bundled dashboard's sections layout is no longer misaligned. All
+  sections used the default 1-column span, and the "Graphs" section held
+  four stacked history-graphs, so it became a long, skinny column that
+  stretched its row and pushed the other controls down with a blank gap in
+  the middle. Every section now spans 2 columns and the graphs are split
+  into two side-by-side sections ("Graphs" and "Battery & Energy"), so the
+  layout forms balanced pairs across the width with no empty area.
+
 ## [1.4.8] - 2026-08-06
 
 ### Fixed
