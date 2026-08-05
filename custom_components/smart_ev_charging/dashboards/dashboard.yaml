@@ -1,19 +1,15 @@
 ########################################################################
 # Smart EV Charging — Native Dashboard
 #
+# This is the canonical copy, bundled inside the integration so it can be
+# auto-installed on setup (see ../../__init__.py), which copies it to
+# <config>/dashboards/smart_ev_charging_dashboard.yaml. Don't maintain a
+# second copy elsewhere in the repo.
+#
 # Uses only Home Assistant's built-in "Sections" view and native cards
 # (tile, entities, history-graph, markdown) — no HACS frontend cards
-# required. Import via Settings > Dashboards > + Add Dashboard >
-# "New dashboard from YAML", then paste this file, OR add it as a
-# YAML-mode dashboard in configuration.yaml:
-#
-#   lovelace:
-#     dashboards:
-#       smart-ev-charging:
-#         mode: yaml
-#         title: Smart EV Charging
-#         icon: mdi:ev-station
-#         filename: dashboards/dashboard.yaml
+# required. To add it manually instead: Settings > Dashboards > + Add
+# Dashboard > "New dashboard from YAML", then paste this file.
 #
 # If the blueprint automation was renamed away from the default
 # "Smart EV Charging", update the single `automation.smart_ev_charging`

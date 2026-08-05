@@ -6,7 +6,7 @@ level is reached. Works with *any* EV/charger integration — you point it at
 your existing vehicle/charger/price entities once, through a normal
 Home Assistant config flow; a package and blueprint do the rest.
 
-![version](https://img.shields.io/badge/version-1.2.0-blue)
+![version](https://img.shields.io/badge/version-1.3.0-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ---
@@ -38,22 +38,24 @@ Home Assistant config flow; a package and blueprint do the rest.
 smart-ev-charging/
 ├── custom_components/
 │   └── smart_ev_charging/         # HACS Integration: config flow + entity mirrors
+│       ├── blueprint/
+│       │   └── smart_ev_charging.yaml   # canonical blueprint, auto-installed on setup
+│       └── dashboards/
+│           └── dashboard.yaml           # canonical native dashboard, auto-installed on setup
 ├── packages/
 │   └── smart_ev_charging.yaml     # helpers, template sensors, statistics
-├── blueprints/
-│   └── automation/
-│       └── smart_ev_charging.yaml # the price/plug automation logic
 ├── scripts/
 │   └── smart_ev_charging_scripts.yaml
 ├── dashboards/
-│   ├── dashboard.yaml             # native Sections dashboard
-│   └── mushroom_dashboard.yaml    # enhanced (Mushroom + ApexCharts)
+│   └── mushroom_dashboard.yaml    # enhanced (Mushroom + ApexCharts) — manual install only
 ├── images/                        # dashboard screenshots
 ├── hacs.json
 ├── README.md
 ├── LICENSE
 └── CHANGELOG.md
 ```
+
+The blueprint and native dashboard live inside `custom_components/smart_ev_charging/` — not duplicated at the repo root — because the integration copies them into your config directory automatically on setup (see [Configuration](#configuration)).
 
 ---
 
@@ -86,20 +88,19 @@ added in that release.
    **Integration**.
 2. Install "Smart EV Charging" and restart Home Assistant. HACS copies
    `custom_components/smart_ev_charging/` into your config.
-3. Manually copy the following two items from this repository into your
-   Home Assistant config directory (HACS's Integration category only
-   copies `custom_components/`, not the package/blueprint/scripts/
-   dashboards that round out the feature):
+3. Manually copy the following from this repository into your Home
+   Assistant config directory (HACS's Integration category only copies
+   `custom_components/`):
    - `packages/smart_ev_charging.yaml` → `config/packages/`
-   - `blueprints/automation/smart_ev_charging.yaml` →
-     `config/blueprints/automation/smart_ev_charging/smart_ev_charging.yaml`
    - `scripts/smart_ev_charging_scripts.yaml` → `config/scripts/`
+
+   You do **not** need to copy the blueprint or dashboard — setting up
+   the integration (next section) installs those automatically.
 
 ### Manual installation
 
-1. Copy `custom_components/`, `packages/`, `blueprints/`, and `scripts/`
-   into your Home Assistant config directory, merging with any existing
-   folders.
+1. Copy `custom_components/`, `packages/`, and `scripts/` into your Home
+   Assistant config directory, merging with any existing folders.
 2. Make sure `configuration.yaml` includes:
 
    ```yaml
@@ -167,19 +168,29 @@ The integration exposes what you picked under stable entity IDs
 — the package, scripts, blueprint, and dashboards all read from these, not
 from your raw integration entities directly.
 
-### 2. Import and configure the blueprint
+Finishing this step also copies the blueprint and native dashboard YAML
+into your config directory automatically — check the "Smart EV Charging:
+setup" notification (Settings > Notifications) for exactly what was
+installed and what's still left to do.
 
-**Settings > Automations & Scenes > Blueprints > Import Blueprint**, paste:
+### 2. Create the automation from the blueprint
+
+**Settings > Automations & Scenes > Blueprints.** "Smart EV Charging"
+should already be listed (it was copied into
+`blueprints/automation/smart_ev_charging/` in step 1) — click **Create
+Automation**. If it isn't listed yet, reload the Blueprints page or
+restart Home Assistant once, or import it manually by pasting this URL
+via **Import Blueprint**:
 
 ```
-https://github.com/gokhancelik/smart-ev-charging/blob/master/blueprints/automation/smart_ev_charging.yaml
+https://github.com/gokhancelik/smart-ev-charging/blob/master/custom_components/smart_ev_charging/blueprint/smart_ev_charging.yaml
 ```
 
-Create a new automation from the blueprint, name it **Smart EV Charging**
-(the dashboards assume `automation.smart_ev_charging` — rename the one
-reference in the dashboard YAML if you use a different name). The
-blueprint no longer asks you to re-pick your vehicle/charger/price
-entities — it already reads them from step 1. It only needs:
+Name the automation **Smart EV Charging** (the dashboards assume
+`automation.smart_ev_charging` — rename the one reference in the
+dashboard YAML if you use a different name). The blueprint doesn't ask
+you to re-pick your vehicle/charger/price entities — it already reads
+them from step 1. It only needs:
 
 - **Start Charging Action** / **Stop Charging Action** — whatever action
   actually starts/stops your charger (a `switch.turn_on`, a charger
@@ -195,12 +206,19 @@ entities — it already reads them from step 1. It only needs:
 
 ### 3. Add the dashboard
 
-**Settings > Dashboards > + Add Dashboard > New dashboard from YAML**,
-paste the contents of `dashboards/dashboard.yaml` (or
-`dashboards/mushroom_dashboard.yaml` if you have
+Home Assistant doesn't give integrations a safe way to add a dashboard to
+your sidebar automatically (it'd require touching undocumented Lovelace
+internals with a known history of silently destroying dashboard data —
+not a risk worth taking), so this one step stays manual: **Settings >
+Dashboards > + Add Dashboard > New dashboard from YAML**, then paste the
+contents of the file step 1 already copied to
+`config/dashboards/smart_ev_charging_dashboard.yaml`.
+
+Prefer the enhanced version instead? Copy `dashboards/mushroom_dashboard.yaml`
+from this repository (not auto-installed) if you have
 [Mushroom](https://github.com/piitaya/lovelace-mushroom) and
 [ApexCharts Card](https://github.com/RomRider/apexcharts-card) installed
-via HACS).
+via HACS.
 
 ### 4. Tune optional features
 
@@ -319,6 +337,17 @@ tracking on startup so duration/energy/cost stay accurate.
 No — it only overrides the current session. It resets automatically when
 you unplug.
 
+**Why doesn't the dashboard just appear in my sidebar automatically, like the blueprint does?**
+Home Assistant has no officially supported, stable API for an integration
+to register a Lovelace dashboard on your behalf — the mechanism that
+exists is an undocumented internal of the `lovelace` component with a
+known bug that can silently wipe existing dashboard data if used
+incorrectly. Rather than risk that, the integration copies the dashboard
+YAML into your config directory for you and leaves the one-click "Add
+Dashboard from YAML" step to you. Blueprints don't have this problem —
+they're just files Home Assistant reads from disk, so copying the file
+*is* the whole installation.
+
 ---
 
 ## Troubleshooting
@@ -326,6 +355,7 @@ you unplug.
 | Symptom | Likely cause |
 |---|---|
 | "Smart EV Charging" doesn't appear in + Add Integration | `custom_components/smart_ev_charging/` is missing or HA wasn't restarted after install |
+| Blueprint not listed under Settings > Blueprints after adding the integration | Check the "Smart EV Charging: setup" notification confirmed it was installed; if the destination file already existed from a previous install, it's intentionally left untouched — verify `blueprints/automation/smart_ev_charging/smart_ev_charging.yaml` directly |
 | Helpers/sensors from the package don't exist | `configuration.yaml` is missing the `packages:` include, or HA wasn't restarted |
 | Scripts fail with "not found" | `configuration.yaml` is missing the `script: !include_dir_merge_named scripts` include |
 | `sensor.ev_battery_percentage` / `sensor.ev_charging_power` / `sensor.ev_energy_meter` don't exist | That field was left empty in the integration's config flow — expected, it's optional |

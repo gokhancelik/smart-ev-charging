@@ -78,7 +78,7 @@ Five pieces cooperate and none is self-sufficient:
 
 1. **`custom_components/smart_ev_charging/`** — the only piece HACS
    auto-installs (Integration category; version comes from its
-   `manifest.json`, not `hacs.json`). Owns entity *configuration* only:
+   `manifest.json`, not `hacs.json`). Owns entity *configuration*:
    `config_flow.py` collects the user's vehicle/charger/price entities
    (required: vehicle_connected, charging_active, price, cheap_price;
    optional: battery, power, energy, departure_calendar) through a config
@@ -94,8 +94,15 @@ Five pieces cooperate and none is self-sufficient:
    `sensor.py` also exposes a diagnostic `sensor.ev_smart_charging_config`
    whose attributes hold the full configured entity map (used by the
    blueprint's departure-calendar lookup and the dashboards' Debug section).
-   It owns zero charging *decision* logic — that's the package/blueprint's
-   job.
+   `__init__.py` also owns **best-effort auto-install**: on
+   `async_setup_entry`, it copies the bundled
+   `custom_components/smart_ev_charging/blueprint/smart_ev_charging.yaml`
+   and `custom_components/smart_ev_charging/dashboards/dashboard.yaml`
+   into the user's `<config>/blueprints/.../` and `<config>/dashboards/`
+   (only if the destination doesn't already exist — never overwrites),
+   then posts one `persistent_notification` summarizing what was
+   installed and what's still manual. It owns zero charging *decision*
+   logic — that's the package/blueprint's job.
 2. **`packages/smart_ev_charging.yaml`** — `input_boolean` / `input_number`
    / `input_datetime` / `input_text` helpers, `counter`, `utility_meter`,
    `template:` sensors/binary_sensors derived from the integration's
@@ -103,30 +110,63 @@ Five pieces cooperate and none is self-sufficient:
    and one static automation (`ev_smart_charging_notification_actions`)
    that listens for `mobile_app_notification_action` events and dispatches
    to scripts. Reads the integration's entities; never reads the user's
-   raw vehicle/charger entities directly.
-3. **`blueprints/automation/smart_ev_charging.yaml`** — the actual
-   plug/price/charging state machine. User-instantiated once via the HA
-   UI. Only 4 inputs remain (`start_charging_action`, `stop_charging_action`,
-   `notify_targets`, `deadline_lead_time_minutes`) — the vehicle/charger/
-   price entities are *not* blueprint inputs; the blueprint reads the
-   integration's fixed mirror entity IDs directly, the same way it already
-   hardcodes `input_boolean.ev_follow_price`. Do not re-add those as
-   `!input` selectors — that would resurrect the double-configuration
-   problem the integration exists to remove. Uses trigger IDs + `choose:`
-   blocks, `mode: queued` to serialize concurrent trigger firings and
-   avoid race conditions.
+   raw vehicle/charger entities directly. Not auto-installed — README's
+   manual-copy step is the only way this reaches the user's config, since
+   `packages:`/`script:` YAML loading has no equivalent of the blueprint's
+   "just a file on disk" simplicity (it needs a `configuration.yaml`
+   include plus a full restart either way).
+3. **`custom_components/smart_ev_charging/blueprint/smart_ev_charging.yaml`**
+   — the actual plug/price/charging state machine, and the **single
+   canonical copy** (do not recreate a second copy at a repo-root
+   `blueprints/` path — that duplication existed in earlier versions and
+   was deliberately removed; `__init__.py`'s auto-install is what puts a
+   *runtime* copy in the user's config, not a second copy in this repo).
+   User-instantiated once via the HA UI. Only 4 inputs remain
+   (`start_charging_action`, `stop_charging_action`, `notify_targets`,
+   `deadline_lead_time_minutes`) — the vehicle/charger/price entities are
+   *not* blueprint inputs; the blueprint reads the integration's fixed
+   mirror entity IDs directly, the same way it already hardcodes
+   `input_boolean.ev_follow_price`. Do not re-add those as `!input`
+   selectors — that would resurrect the double-configuration problem the
+   integration exists to remove. Uses trigger IDs + `choose:` blocks,
+   `mode: queued` to serialize concurrent trigger firings and avoid race
+   conditions.
 4. **`scripts/smart_ev_charging_scripts.yaml`** — all reusable logic
    (notification building, session bookkeeping, dashboard button targets).
    Flat mapping of `script_id: {...}`, merged in via
    `script: !include_dir_merge_named scripts` — do not wrap it in a `script:`
    key. Reads `sensor.ev_battery_percentage` / `sensor.ev_charging_power` /
    `sensor.ev_energy_meter` directly rather than receiving them as script
-   fields — only `notify_targets` (genuinely per-installation) is passed in.
-5. **`dashboards/dashboard.yaml`** (native) and
-   **`dashboards/mushroom_dashboard.yaml`** (enhanced, needs Mushroom +
-   ApexCharts) — same information architecture in both, native cards vs.
-   `custom:mushroom-*`/`custom:apexcharts-card`. Keep them in sync when
-   adding a new sensor/section.
+   fields — only `notify_targets` (genuinely per-installation) is passed
+   in. `script.ev_send_notification` is the one place that actually calls
+   `notify.send_message`; every notify-sending script routes through it
+   instead of calling a notify action directly.
+5. **`custom_components/smart_ev_charging/dashboards/dashboard.yaml`**
+   (native, canonical copy — same "don't duplicate at repo root" rule as
+   the blueprint) and **`dashboards/mushroom_dashboard.yaml`** (enhanced,
+   needs Mushroom + ApexCharts, repo-root only, *not* auto-installed —
+   requires HACS frontend resources the integration can't detect or
+   install). Same information architecture in both. Keep them in sync
+   when adding a new sensor/section.
+
+### Why the dashboard isn't auto-registered in the sidebar, but the blueprint is auto-installed
+
+Both are "just copy a file into the config dir," which `__init__.py`
+does identically for both via plain `shutil.copyfile` in an executor job
+— safe, standard, no special API needed. The difference is what happens
+*after*: a blueprint file dropped into `blueprints/automation/` is
+immediately usable (HA reads blueprints from disk on demand). A
+dashboard *appearing in the sidebar* would require registering it with
+the `lovelace` integration's storage collection, which is an
+undocumented internal (not a stable public API) with a known bug
+(home-assistant/core#165767) where calling it before Lovelace's lazy-load
+completes can silently wipe existing dashboard data. That risk is not
+worth taking for convenience, so the integration copies the dashboard
+YAML to `<config>/dashboards/` and leaves the actual "Add Dashboard from
+YAML" click to the user — see the persistent_notification text in
+`__init__.py` and README's FAQ for how this is explained to users. Don't
+"fix" this by wiring up the Lovelace collection API without re-verifying
+that bug is resolved.
 
 ### Why the integration's mirror entities exist
 

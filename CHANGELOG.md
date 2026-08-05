@@ -5,6 +5,34 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-08-05
+
+### Added
+
+- The integration now auto-installs the blueprint and native dashboard
+  on setup: `async_setup_entry` copies the bundled
+  `custom_components/smart_ev_charging/blueprint/smart_ev_charging.yaml`
+  and `.../dashboards/dashboard.yaml` into
+  `<config>/blueprints/automation/smart_ev_charging/` and
+  `<config>/dashboards/`, only if not already present (never overwrites),
+  then posts a persistent notification listing what was installed and
+  what's still manual (packages/scripts copy, `configuration.yaml`
+  includes, restart).
+- The dashboard is *not* auto-registered in the sidebar — Home Assistant
+  has no stable, documented API for that from a custom integration (the
+  internal Lovelace mechanism that exists has a known data-destroying
+  bug), so the one remaining manual step is adding it via **Settings >
+  Dashboards > + Add Dashboard > New dashboard from YAML**.
+
+### Changed
+
+- Moved the blueprint and native dashboard's canonical source into
+  `custom_components/smart_ev_charging/` (no longer duplicated at a
+  repo-root `blueprints/`/`dashboards/dashboard.yaml` path) so the
+  bundled copy used for auto-install can't drift out of sync with a
+  second copy. `dashboards/mushroom_dashboard.yaml` (not auto-installed)
+  stays at the repo root.
+
 ## [1.2.0] - 2026-08-05
 
 ### Changed (requires reconfiguration)

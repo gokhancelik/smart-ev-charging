@@ -5,8 +5,9 @@
 #   - Mushroom (custom:mushroom-*-card)
 #   - apexcharts-card (custom:apexcharts-card)
 #
-# If you don't have these installed, use dashboards/dashboard.yaml
-# instead — it covers the exact same information with native cards.
+# If you don't have these installed, use the native dashboard instead —
+# it covers the exact same information with native cards, and gets
+# copied into your config automatically (see README > Installation).
 #
 # If the blueprint automation was renamed away from the default
 # "Smart EV Charging", update the single `automation.smart_ev_charging`

@@ -1,6 +1,10 @@
 ########################################################################
 # Smart EV Charging — Blueprint Automation
 #
+# This is the canonical copy, bundled inside the integration so it can be
+# auto-installed on setup (see __init__.py). Don't maintain a second copy
+# elsewhere in the repo — everything reads from here.
+#
 # Requires the companion custom_components/smart_ev_charging integration
 # to be set up first (Settings > Devices & Services > + Add Integration >
 # Smart EV Charging) — that's where you pick your vehicle/charger/price
@@ -21,9 +25,11 @@
 # to be installed, since this blueprint reads/writes its helpers and
 # calls its scripts.
 #
-# Import: Settings > Automations & Scenes > Blueprints > Import Blueprint,
-# then paste the raw GitHub URL of this file, or copy it manually into
-# <config>/blueprints/automation/smart_ev_charging/smart_ev_charging.yaml.
+# The integration copies this file to
+# <config>/blueprints/automation/smart_ev_charging/smart_ev_charging.yaml
+# automatically on setup. To import manually instead: Settings >
+# Automations & Scenes > Blueprints > Import Blueprint, paste:
+# https://github.com/gokhancelik/smart-ev-charging/blob/master/custom_components/smart_ev_charging/blueprint/smart_ev_charging.yaml
 ########################################################################
 blueprint:
   name: Smart EV Charging
@@ -35,7 +41,7 @@ blueprint:
     Charging integration (entity configuration) and package (helpers,
     sensors, scripts) to be installed first.
   domain: automation
-  source_url: https://github.com/gokhancelik/smart-ev-charging/blob/master/blueprints/automation/smart_ev_charging.yaml
+  source_url: https://github.com/gokhancelik/smart-ev-charging/blob/master/custom_components/smart_ev_charging/blueprint/smart_ev_charging.yaml
   input:
     start_charging_action:
       name: Start Charging Action
