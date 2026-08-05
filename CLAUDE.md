@@ -18,10 +18,13 @@ changes" below); the Python side has never been exercised against a
 running Home Assistant instance (no `homeassistant` package available in
 this environment — see the Integration section below).
 
-HACS's "Package" category (what v1.0.0 shipped as) was removed from HACS
-entirely, which is *why* the integration exists — see `CHANGELOG.md`'s
-2.0.0 entry and README's "Upgrading from 1.x" before assuming the old
-all-YAML, no-Python design is still current.
+An earlier iteration of this project was pure YAML (no Python), installed
+via HACS's "Package" category. That category was removed from HACS
+entirely, which is *why* the integration exists — a real Integration is
+now the only viable HACS distribution path for this kind of project.
+Don't assume the old all-YAML, no-Python design from git history's early
+commits is still current; `CHANGELOG.md` and this file describe the
+current, integration-based architecture only.
 
 `ev_charging_hacs_package.md` is the original spec this project was built
 from — consult it to check a proposed change against the original intent

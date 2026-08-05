@@ -6,7 +6,7 @@ level is reached. Works with *any* EV/charger integration — you point it at
 your existing vehicle/charger/price entities once, through a normal
 Home Assistant config flow; a package and blueprint do the rest.
 
-![version](https://img.shields.io/badge/version-2.0.0-blue)
+![version](https://img.shields.io/badge/version-1.0.0-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ---
@@ -74,33 +74,6 @@ smart-ev-charging/
 
 ---
 
-## Upgrading from 1.x
-
-Version 2.0.0 is a breaking change: HACS dropped its "Package" category
-(what 1.x installed as), so distribution moved to a real
-`custom_components/smart_ev_charging` Integration, and the old
-`input_text.ev_*_entity` config-pointer helpers were replaced by that
-integration's config flow.
-
-To upgrade:
-
-1. Install `custom_components/smart_ev_charging/` (see
-   [Installation](#installation)) and restart Home Assistant.
-2. **Settings > Devices & Services > + Add Integration > Smart EV
-   Charging**, and re-enter the same entity IDs you'd previously put in
-   the `input_text.ev_*_entity` helpers.
-3. Update to the new `packages/smart_ev_charging.yaml` and
-   `blueprints/automation/smart_ev_charging.yaml` from this release —
-   the blueprint now has 4 inputs instead of 11 (open your existing
-   automation and re-save it from the updated blueprint).
-4. The old `input_text.ev_*_entity` helpers are no longer referenced
-   anywhere and can be deleted (Settings > Devices & Services > Helpers).
-5. Session/statistics helpers (`input_number.ev_lifetime_*`,
-   `counter.ev_charging_sessions_total`, etc.) are untouched — no data is
-   lost.
-
----
-
 ## Installation
 
 ### Via HACS (custom repository)
@@ -160,7 +133,7 @@ Tibber, …):
 "Cheap electricity" is normally produced by your energy-price integration
 or a small template/threshold binary_sensor you already have — this
 package only *reacts* to it. Only one instance of the integration is
-allowed (single-vehicle in v2.0.0 — see [FAQ](#faq)). To change any of
+allowed (single-vehicle for now — see [FAQ](#faq)). To change any of
 these entities later, open the integration's **Configure** option instead
 of re-adding it.
 
