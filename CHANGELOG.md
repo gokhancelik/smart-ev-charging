@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [1.4.3] - 2026-08-05
 
+### Added
+
+- Automated `pytest` unit tests for the config-flow "matching states"
+  pickers and binary-sensor state parsing (see the README *Testing*
+  section; run with `python -m pytest`).
+
 ### Changed
 
 - Added verbose `debug` logging to the "Status sensor states" config-flow

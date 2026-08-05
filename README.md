@@ -385,12 +385,30 @@ template sensor, and the automation's last decision in one place.
 - [ ] Additional language translations for notifications and the config
       flow (currently English only)
 - [ ] Home Assistant Energy Dashboard "EV charging" native card support
-- [ ] Automated tests (`pytest-homeassistant-custom-component`) / CI YAML
-      linting — the integration is currently validated only for Python
-      syntax and JSON well-formedness, not against a running Home
-      Assistant instance
+- [x] Automated tests (`pytest`) — unit tests for the config-flow
+      state-picker and binary-sensor state parsing; run with
+      `python -m pytest` (see the *Testing* section below). A
+      `pytest-homeassistant-custom-component` harness / CI YAML is still
+      not in place, so the tests exercise the pure logic against stubbed
+      Home Assistant modules rather than a running instance
 
 ---
+
+## Testing
+
+The integration ships a self-contained `pytest` suite for its pure logic —
+the config-flow "matching states" pickers and the binary-sensor state
+parsing. It depends only on `pytest` (Home Assistant packages are stubbed
+out), so it runs anywhere without an HA install:
+
+```
+python -m pytest
+```
+
+The tests cover: which entity sources get a matching-states picker, how
+possible state options are collected and de-duplicated, the structure of
+the resulting `select`-selector schema, and how comma-separated/list
+"on states" are normalised.
 
 ## Contributing
 
