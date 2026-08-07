@@ -58,7 +58,7 @@ ev_send_notification:
   fields:
     notify_targets:
       description: One or more mobile_app device IDs to send to.
-      example: ["3fae6...device_id"]
+      example: "3fae6...device_id"
     title:
       description: Notification title (omit for control messages like clear_notification).
       example: "⚡ Charging"
@@ -67,7 +67,7 @@ ev_send_notification:
       example: "Charging is scheduled for the next cheap electricity period."
     notification_data:
       description: The nested "data" payload (tag, actions, channel, ...).
-      example: { "tag": "ev_charging" }
+      example: '{"tag": "ev_charging"}'
   sequence:
     - variables:
         targets: "{{ [notify_targets] if notify_targets is string else notify_targets }}"
@@ -115,7 +115,7 @@ ev_notify_plugged_in:
   fields:
     notify_targets:
       description: One or more mobile_app device IDs to send to.
-      example: ["3fae6...device_id"]
+      example: "3fae6...device_id"
   sequence:
     - choose:
         # Manual mode: skip the "waiting" notification, start right away
@@ -162,7 +162,7 @@ ev_notify_charging_started:
   fields:
     notify_targets:
       description: One or more mobile_app device IDs to send to.
-      example: ["3fae6...device_id"]
+      example: "3fae6...device_id"
   sequence:
     - if:
         - condition: state
@@ -202,7 +202,7 @@ ev_notify_charging_finished:
   fields:
     notify_targets:
       description: One or more mobile_app device IDs to send to.
-      example: ["3fae6...device_id"]
+      example: "3fae6...device_id"
   sequence:
     - if:
         - condition: state

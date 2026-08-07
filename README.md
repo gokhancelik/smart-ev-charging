@@ -6,7 +6,7 @@ level is reached. Works with *any* EV/charger integration — you point it at
 your existing vehicle/charger/price entities once, through a normal
 Home Assistant config flow; a package and blueprint do the rest.
 
-![version](https://img.shields.io/badge/version-1.5.0-blue)
+![version](https://img.shields.io/badge/version-1.5.1-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ---
@@ -100,7 +100,10 @@ added in that release.
    The integration copies the helper package and scripts into
    `config/packages/` and `config/scripts/` automatically when you set
    it up — no manual file copying needed (it also installs the blueprint
-   and dashboard for you).
+   and dashboard for you). These two include lines are required for
+   **every** installation (HACS and manual alike): HACS puts the Python
+   in place, but only `configuration.yaml` tells Home Assistant to load
+   the package and scripts at startup.
 
 ### Manual installation
 

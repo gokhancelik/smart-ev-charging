@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.1] - 2026-08-07
+
+### Fixed
+
+- The bundled `scripts/smart_ev_charging_scripts.yaml` used non-scalar
+  values for some `example:` fields (`notify_targets` as a list and
+  `notification_data` as a mapping). Home Assistant's script schema
+  requires `example` to be a string, so `script.ev_send_notification`
+  (and the notify scripts referencing it) failed to load with
+  "value should be a string for dictionary value". These are now scalar
+  strings, so all scripts load and the automation's notification actions
+  work again.
+
 ## [1.5.0] - 2026-08-07
 
 ### Added
