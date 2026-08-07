@@ -1,11 +1,11 @@
 """The Smart EV Charging integration.
 
 Owns entity configuration (see config_flow.py) plus best-effort
-auto-install of the bundled blueprint and dashboard on setup (see
-_install_bundled_assets below). All charging decision logic lives in the
-companion HA package and blueprint — see packages/smart_ev_charging.yaml
-and custom_components/smart_ev_charging/blueprint/smart_ev_charging.yaml
-in this repository.
+auto-install of the bundled blueprint, package, scripts and dashboard on
+setup (see _install_bundled_assets below). All charging decision logic
+lives in the companion HA package and blueprint — see
+packages/smart_ev_charging.yaml and
+blueprint/smart_ev_charging.yaml inside this component directory.
 """
 
 from __future__ import annotations
@@ -37,8 +37,10 @@ _BLUEPRINT_DEST_PARTS = (
     "smart_ev_charging",
     "smart_ev_charging.yaml",
 )
-_DASHBOARD_SOURCE = _INTEGRATION_DIR / "dashboards" / "dashboard.yaml"
-_DASHBOARD_DEST_PARTS = ("dashboards", "smart_ev_charging_dashboard.yaml")
+_PACKAGE_SOURCE = _INTEGRATION_DIR / "packages" / "smart_ev_charging.yaml"
+_PACKAGE_DEST_PARTS = ("packages", "smart_ev_charging.yaml")
+_SCRIPTS_SOURCE = _INTEGRATION_DIR / "scripts" / "smart_ev_charging_scripts.yaml"
+_SCRIPTS_DEST_PARTS = ("scripts", "smart_ev_charging_scripts.yaml")
 _NOTIFICATION_ID = "smart_ev_charging_setup"
 
 
@@ -60,11 +62,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    blueprint_synced, dashboard_installed = await hass.async_add_executor_job(
-        _install_bundled_assets, hass
+    blueprint_synced, package_installed, scripts_installed, inc = (
+        await hass.async_add_executor_job(_install_bundled_assets, hass)
     )
-    if blueprint_synced or dashboard_installed:
-        await _async_notify_setup_complete(hass, blueprint_synced, dashboard_installed)
+    if blueprint_synced or package_installed or scripts_installed or not inc:
+        await _async_notify_setup_complete(
+            hass, blueprint_synced, package_installed, scripts_installed, inc
+        )
 
     await rebuild_installed_dashboard(hass)
 
@@ -92,10 +96,10 @@ async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     await hass.config_entries.async_reload(entry.entry_id)
 
 
-def _install_bundled_assets(hass: HomeAssistant) -> tuple[bool, bool]:
-    """Install the bundled blueprint/dashboard into the config dir.
+def _install_bundled_assets(hass: HomeAssistant) -> tuple[bool, bool, bool, bool]:
+    """Install bundled assets into the config dir.
 
-    Runs in the executor (blocking file I/O). Two different policies:
+    Runs in the executor (blocking file I/O). Three different policies:
 
     - The blueprint is kept in sync on every setup/restart (overwritten
       whenever its content differs from the bundled copy). Blueprints are
@@ -104,18 +108,21 @@ def _install_bundled_assets(hass: HomeAssistant) -> tuple[bool, bool]:
       actually reach an already-installed automation. Without this, a
       fixed blueprint shipped in a new release would never reach anyone
       who installed an earlier, broken version.
-    - The dashboard is written once and never touched again — dashboards
-      are commonly hand-customized (card layout, added sections) after
-      import, and overwriting that would destroy real user work.
+    - The dashboard, package and scripts are written once and never
+      touched again — they're commonly hand-customized (card layout,
+      notification wording, helper tweaks) after install, and overwriting
+      them would destroy real user work.
 
-    Returns (blueprint_synced, dashboard_installed) — True only when this
-    call actually wrote something.
+    Returns (blueprint_synced, package_installed, scripts_installed,
+    config_includes_present) — True for the *_installed flags only when
+    this call actually wrote something; the last is True when
+    configuration.yaml already carries both include lines.
     """
     blueprint_synced = _sync_file(hass, _BLUEPRINT_SOURCE, _BLUEPRINT_DEST_PARTS)
-    dashboard_installed = _copy_if_missing(
-        hass, _DASHBOARD_SOURCE, _DASHBOARD_DEST_PARTS
-    )
-    return blueprint_synced, dashboard_installed
+    package_installed = _copy_if_missing(hass, _PACKAGE_SOURCE, _PACKAGE_DEST_PARTS)
+    scripts_installed = _copy_if_missing(hass, _SCRIPTS_SOURCE, _SCRIPTS_DEST_PARTS)
+    inc = _config_has_includes(hass)
+    return blueprint_synced, package_installed, scripts_installed, inc
 
 
 def _sync_file(hass: HomeAssistant, source: Path, dest_parts: tuple[str, ...]) -> bool:
@@ -141,8 +148,33 @@ def _copy_if_missing(
     return True
 
 
+def _config_has_includes(hass: HomeAssistant) -> bool:
+    """Return True when configuration.yaml carries both include lines.
+
+    The package and scripts are plain YAML files that Home Assistant only
+    loads if they're referenced from configuration.yaml. We can't edit
+    that file for the user, but we can detect whether the two lines are
+    present so the setup notification can tell them exactly what's left.
+    """
+    config_yaml = Path(hass.config.path("configuration.yaml"))
+    if not config_yaml.exists():
+        return False
+    try:
+        text = config_yaml.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+    return (
+        "!include_dir_named packages" in text
+        and "!include_dir_merge_named scripts" in text
+    )
+
+
 async def _async_notify_setup_complete(
-    hass: HomeAssistant, blueprint_synced: bool, dashboard_installed: bool
+    hass: HomeAssistant,
+    blueprint_synced: bool,
+    package_installed: bool,
+    scripts_installed: bool,
+    config_includes_present: bool,
 ) -> None:
     lines = ["Smart EV Charging installed what it safely can on its own:", ""]
     if blueprint_synced:
@@ -152,29 +184,32 @@ async def _async_notify_setup_complete(
             "the automation from it. Already have one? Restart Home Assistant "
             "(or reload Automations) to pick up this update."
         )
-    if dashboard_installed:
+    if package_installed:
         lines.append(
-            "- ✅ Dashboard YAML copied to "
-            "`dashboards/smart_ev_charging_dashboard.yaml` — Home Assistant "
-            "doesn't offer a safe way for an integration to add a dashboard to "
-            "your sidebar automatically, so add it yourself: **Settings > "
-            "Dashboards > + Add Dashboard > New dashboard from YAML**, then "
-            "paste that file's contents."
+            "- ✅ Helper package written to `packages/smart_ev_charging.yaml`."
+        )
+    if scripts_installed:
+        lines.append(
+            "- ✅ Scripts written to `scripts/smart_ev_charging_scripts.yaml`."
         )
     lines.append("")
     lines.append(
-        "Still needed (can't be automated — see the "
-        "[README](https://github.com/gokhancelik/smart-ev-charging#installation)):"
+        "Still needed (can't be automated — Home Assistant only loads the "
+        "package and scripts if `configuration.yaml` points at them, and "
+        "that requires a full restart):"
     )
-    lines.append(
-        "- Copy `packages/smart_ev_charging.yaml` and "
-        "`scripts/smart_ev_charging_scripts.yaml` into your config"
-    )
-    lines.append(
-        "- Add `packages: !include_dir_named packages` and "
-        "`script: !include_dir_merge_named scripts` to `configuration.yaml`"
-    )
-    lines.append("- Restart Home Assistant")
+    if config_includes_present:
+        lines.append("- Both include lines are present — just **Restart Home Assistant**.")
+    else:
+        lines.append(
+            "- Add these two lines to `configuration.yaml`, then restart:"
+        )
+        lines.append("  ```yaml")
+        lines.append("  homeassistant:")
+        lines.append("    packages: !include_dir_named packages")
+        lines.append("")
+        lines.append("  script: !include_dir_merge_named scripts")
+        lines.append("  ```")
 
     await hass.services.async_call(
         "persistent_notification",

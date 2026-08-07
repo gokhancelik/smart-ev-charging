@@ -117,18 +117,20 @@ Five pieces cooperate and none is self-sufficient:
    summarizing what was
    installed and what's still manual. It owns zero charging *decision*
    logic — that's the package/blueprint's job.
-2. **`packages/smart_ev_charging.yaml`** — `input_boolean` / `input_number`
-   / `input_datetime` / `input_text` helpers, `counter`, `utility_meter`,
-   `template:` sensors/binary_sensors derived from the integration's
-   mirror entities (charging mode/state/duration/session cost/statistics),
-   and one static automation (`ev_smart_charging_notification_actions`)
-   that listens for `mobile_app_notification_action` events and dispatches
-   to scripts. Reads the integration's entities; never reads the user's
-   raw vehicle/charger entities directly. Not auto-installed — README's
-   manual-copy step is the only way this reaches the user's config, since
-   `packages:`/`script:` YAML loading has no equivalent of the blueprint's
-   "just a file on disk" simplicity (it needs a `configuration.yaml`
-   include plus a full restart either way).
+2. **`custom_components/smart_ev_charging/packages/smart_ev_charging.yaml`**
+    — `input_boolean` / `input_number`
+    / `input_datetime` / `input_text` helpers, `counter`, `utility_meter`,
+    `template:` sensors/binary_sensors derived from the integration's
+    mirror entities (charging mode/state/duration/session cost/statistics),
+    and one static automation (`ev_smart_charging_notification_actions`)
+    that listens for `mobile_app_notification_action` events and dispatches
+    to scripts. Reads the integration's entities; never reads the user's
+    raw vehicle/charger entities directly. Auto-copied to the user's
+    `config/packages/` on setup (copy-if-missing), but HA won't load it
+    without the `packages: !include_dir_named packages` include in
+    `configuration.yaml` plus a full restart — `__init__.py` detects the
+    include and tells the user exactly what to add rather than
+    auto-editing their config file.
 3. **`custom_components/smart_ev_charging/blueprint/smart_ev_charging.yaml`**
    — the actual plug/price/charging state machine, and the **single
    canonical copy** (do not recreate a second copy at a repo-root
@@ -155,14 +157,15 @@ Five pieces cooperate and none is self-sufficient:
    then tries to put a list where a string belongs). This shipped broken
    in 1.3.0 and was fixed in 1.3.1 — if you ever add another
    `action`-selector input, use the same bare-item pattern.
-4. **`scripts/smart_ev_charging_scripts.yaml`** — all reusable logic
-   (notification building, session bookkeeping, dashboard button targets).
-   Flat mapping of `script_id: {...}`, merged in via
-   `script: !include_dir_merge_named scripts` — do not wrap it in a `script:`
-   key. Reads `sensor.ev_battery_percentage` / `sensor.ev_charging_power` /
-   `sensor.ev_energy_meter` directly rather than receiving them as script
-   fields — only `notify_targets` (genuinely per-installation) is passed
-   in. `script.ev_send_notification` is the one place that actually calls
+4. **`custom_components/smart_ev_charging/scripts/smart_ev_charging_scripts.yaml`**
+    — all reusable logic
+    (notification building, session bookkeeping, dashboard button targets).
+    Flat mapping of `script_id: {...}`, merged in via
+    `script: !include_dir_merge_named scripts` — do not wrap it in a `script:`
+    key. Reads `sensor.ev_battery_percentage` / `sensor.ev_charging_power` /
+    `sensor.ev_energy_meter` directly rather than receiving them as script
+    fields — only `notify_targets` (genuinely per-installation) is passed
+    in. `script.ev_send_notification` is the one place that actually calls
    `notify.send_message`; every notify-sending script routes through it
    instead of calling a notify action directly.
 5. **`custom_components/smart_ev_charging/dashboards/dashboard.yaml`**
@@ -214,7 +217,8 @@ and package templates depend on the mirrors' entity IDs directly, not on
 set, so a stale start_time survives after a session ends. Any new logic
 that needs to know "did we already seed this session" must check
 `ev_session_tracking`, matching:
-- `scripts/smart_ev_charging_scripts.yaml`: `ev_seed_session_helpers` turns
+- `custom_components/smart_ev_charging/scripts/smart_ev_charging_scripts.yaml`:
+  `ev_seed_session_helpers` turns
   it on, `ev_log_charging_session` turns it off.
 - `blueprints/automation/smart_ev_charging.yaml`'s `ha_restart` branch
   checks it's off before backfilling.
@@ -233,7 +237,8 @@ The blueprint's `notify_targets` input is a `device` selector
 (`multiple: true`, filtered to the `mobile_app` integration) — the user
 picks phones/tablets by name instead of typing a `notify.mobile_app_...`
 service string. `script.ev_send_notification` (in
-`scripts/smart_ev_charging_scripts.yaml`) is the single place that
+`custom_components/smart_ev_charging/scripts/smart_ev_charging_scripts.yaml`)
+is the single place that
 actually sends: it calls `notify.send_message` with
 `target: {device_id: [...]}`, which fans out to every selected device in
 one call — no manual loop. Every other notify-sending script
@@ -272,8 +277,9 @@ Everything package/integration-defined is prefixed `ev_` (`input_boolean.ev_foll
 `sensor.ev_charging_state`, `script.ev_charge_now`, `binary_sensor.ev_vehicle_connected`, …).
 When renaming or removing any entity — whether it originates in the
 integration's `sensor.py`/`binary_sensor.py` or in the package's `template:`
-block — grep across all of `custom_components/`, `packages/`, `blueprints/`,
-`scripts/`, and both `dashboards/*.yaml` files. There is no schema or
+block — grep across all of `custom_components/`, `blueprints/`,
+`custom_components/smart_ev_charging/scripts/`, and both `dashboards/*.yaml`
+files. There is no schema or
 compiler to catch a stale reference; the dashboard files in particular
 silently degrade to "entity not found" cards, and a Jinja template
 referencing a removed entity just silently evaluates to `unknown`. The

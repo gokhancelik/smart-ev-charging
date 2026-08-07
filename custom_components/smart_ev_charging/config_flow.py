@@ -2,7 +2,8 @@
 
 Replaces the old approach of manually filling input_text helpers with the
 raw entity IDs of your vehicle/charger integration. The package
-(packages/smart_ev_charging.yaml) and blueprint still do all the price/plug
+(smart_ev_charging/packages/, installed to config/packages) and blueprint
+still do all the price/plug
 decision logic; this integration's only job is to let you pick those
 entities through a normal HA form, and expose them under stable,
 well-known entity IDs (sensor.ev_charging_price, binary_sensor.ev_vehicle_connected,

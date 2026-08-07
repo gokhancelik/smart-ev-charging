@@ -21,9 +21,10 @@
 # actually start/stop your charger and which mobile device to notify,
 # which is what the inputs below are for.
 #
-# Requires the "Smart EV Charging" package (packages/smart_ev_charging.yaml)
-# to be installed, since this blueprint reads/writes its helpers and
-# calls its scripts.
+# Requires the "Smart EV Charging" package
+# (config/packages/smart_ev_charging.yaml, auto-installed by the
+# integration) to be installed, since this blueprint reads/writes its
+# helpers and calls its scripts.
 #
 # The integration copies this file to
 # <config>/blueprints/automation/smart_ev_charging/smart_ev_charging.yaml

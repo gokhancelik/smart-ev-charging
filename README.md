@@ -6,7 +6,7 @@ level is reached. Works with *any* EV/charger integration — you point it at
 your existing vehicle/charger/price entities once, through a normal
 Home Assistant config flow; a package and blueprint do the rest.
 
-![version](https://img.shields.io/badge/version-1.4.9-blue)
+![version](https://img.shields.io/badge/version-1.5.0-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ---
@@ -39,13 +39,13 @@ smart-ev-charging/
 ├── custom_components/
 │   └── smart_ev_charging/         # HACS Integration: config flow + entity mirrors
 │       ├── blueprint/
-│       │   └── smart_ev_charging.yaml   # canonical blueprint, auto-installed on setup
-│       └── dashboards/
-│           └── dashboard.yaml           # canonical native dashboard, auto-installed on setup
-├── packages/
-│   └── smart_ev_charging.yaml     # helpers, template sensors, statistics
-├── scripts/
-│   └── smart_ev_charging_scripts.yaml
+│       │   └── smart_ev_charging.yaml        # canonical blueprint, auto-installed on setup
+│       ├── dashboards/
+│       │   └── dashboard.yaml                # canonical native dashboard, auto-installed on setup
+│       ├── packages/
+│       │   └── smart_ev_charging.yaml        # helpers, template sensors, statistics — auto-copied to config/packages/
+│       └── scripts/
+│           └── smart_ev_charging_scripts.yaml # scripts — auto-copied to config/scripts/
 ├── dashboards/
 │   └── mushroom_dashboard.yaml    # enhanced (Mushroom + ApexCharts) — manual install only
 ├── images/                        # dashboard screenshots
@@ -88,19 +88,24 @@ added in that release.
    **Integration**.
 2. Install "Smart EV Charging" and restart Home Assistant. HACS copies
    `custom_components/smart_ev_charging/` into your config.
-3. Manually copy the following from this repository into your Home
-   Assistant config directory (HACS's Integration category only copies
-   `custom_components/`):
-   - `packages/smart_ev_charging.yaml` → `config/packages/`
-   - `scripts/smart_ev_charging_scripts.yaml` → `config/scripts/`
+3. Make sure `configuration.yaml` includes:
 
-   You do **not** need to copy the blueprint or dashboard — setting up
-   the integration (next section) installs those automatically.
+   ```yaml
+   homeassistant:
+     packages: !include_dir_named packages
+
+   script: !include_dir_merge_named scripts
+   ```
+
+   The integration copies the helper package and scripts into
+   `config/packages/` and `config/scripts/` automatically when you set
+   it up — no manual file copying needed (it also installs the blueprint
+   and dashboard for you).
 
 ### Manual installation
 
-1. Copy `custom_components/`, `packages/`, and `scripts/` into your Home
-   Assistant config directory, merging with any existing folders.
+1. Copy `custom_components/` into your Home Assistant config directory,
+   merging with the existing folder.
 2. Make sure `configuration.yaml` includes:
 
    ```yaml
@@ -110,6 +115,9 @@ added in that release.
    script: !include_dir_merge_named scripts
    ```
 
+   (The integration copies `packages/smart_ev_charging.yaml` into
+   `config/packages/` and the scripts into `config/scripts/`
+   automatically on setup — you only need the two lines above.)
 3. Restart Home Assistant (packages and custom integrations both require
    a full restart, not just a YAML reload).
 
@@ -299,7 +307,7 @@ _Add your own screenshots to `images/` and reference them here — e.g.:_
 **Does this support multiple vehicles?**
 Not out of the box — the integration only allows a single config entry,
 and the package's helpers are single-vehicle. For a second car, duplicate
-`packages/smart_ev_charging.yaml` and every entity ID inside it with a
+`config/packages/smart_ev_charging.yaml` and every entity ID inside it with a
 different prefix (e.g. `ev2_`), duplicate `custom_components/smart_ev_charging`
 under a new domain, and import a second blueprint instance pointing at the
 new helpers/entities. True multi-vehicle support is on the
@@ -364,7 +372,7 @@ in the blueprints directory.
 | Blueprint not listed under Settings > Blueprints after adding the integration | Check the "Smart EV Charging: setup" notification confirmed it was synced; verify `blueprints/automation/smart_ev_charging/smart_ev_charging.yaml` directly |
 | Creating the automation from the blueprint fails with "Message malformed: value should be a string for dictionary value @ ...['action']" | You have a pre-1.3.1 copy of the blueprint. Restart Home Assistant once (the integration re-syncs the blueprint file on every restart, unlike the dashboard) or delete `blueprints/automation/smart_ev_charging/smart_ev_charging.yaml` and restart to force a fresh copy |
 | Helpers/sensors from the package don't exist | `configuration.yaml` is missing the `packages:` include, or HA wasn't restarted |
-| Scripts fail with "not found" | `configuration.yaml` is missing the `script: !include_dir_merge_named scripts` include. Add it and reload. The automation itself won't break without the debug script (`script.ev_debug_log`) — it only skips the debug-log lines — but the notification/booking-keeping scripts must exist, so add the include and copy `scripts/` before relying on notifications |
+| Scripts fail with "not found" | `configuration.yaml` is missing the `script: !include_dir_merge_named scripts` include. Add it and reload. The automation itself won't break without the debug script (`script.ev_debug_log`) — it only skips the debug-log lines — but the notification/booking-keeping scripts must exist. The integration copies the scripts into `config/scripts/` on setup; if they're still missing, add the include (and the `packages:` include) to `configuration.yaml` and restart |
 | `sensor.ev_battery_percentage` / `sensor.ev_charging_power` / `sensor.ev_energy_meter` don't exist | That field was left empty in the integration's config flow — expected, it's optional |
 | `binary_sensor.ev_vehicle_connected` etc. show "unavailable" | The source entity picked in the integration's config flow is itself unavailable — check it directly |
 | `binary_sensor.ev_vehicle_connected`/`ev_charging_active` never turn on, even though the source status sensor changes | No "matching states" were marked for that source in the config flow's "Status sensor states" screen, or the ticked values don't match your source sensor's actual ones — re-open Configure and pick the exact states (matching is case-insensitive, but must otherwise match exactly) |
@@ -419,7 +427,7 @@ the resulting `select`-selector schema, and how comma-separated/list
 
 Issues and pull requests are welcome. Please keep YAML changes consistent
 with the existing style (comments explaining *why*, not *what*; shared
-logic in `scripts/`, not duplicated across the blueprint).
+logic in the scripts/packages YAML, not duplicated across the blueprint).
 
 ## License
 

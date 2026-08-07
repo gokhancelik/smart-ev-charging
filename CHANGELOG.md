@@ -5,6 +5,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] - 2026-08-07
+
+### Added
+
+- The helper package and scripts are now auto-installed. The canonical
+  `packages/smart_ev_charging.yaml` and
+  `scripts/smart_ev_charging_scripts.yaml` moved into
+  `custom_components/smart_ev_charging/` so they ship via HACS, and the
+  integration copies them to `config/packages/` and `config/scripts/` on
+  setup — no more manual file copying. On setup it also detects whether
+  `configuration.yaml` contains the two include lines and, if not, the
+  setup notification tells you exactly which two lines to add (HA still
+  requires those plus a full restart to load packages/scripts; that can't
+  be automated).
+
 ## [1.4.9] - 2026-08-06
 
 ### Fixed

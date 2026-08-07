@@ -24,8 +24,8 @@ docs update or the release tag:
      backward-compatible feature, major = breaking change.
    - `custom_components/smart_ev_charging/manifest.json`'s `"version"`
      (this is the one HACS actually reads for the Integration category).
-   - `packages/smart_ev_charging.yaml`'s `sensor.ev_smart_charging_version`
-     hardcoded state.
+   - `custom_components/smart_ev_charging/packages/smart_ev_charging.yaml`'s
+     `sensor.ev_smart_charging_version` hardcoded state.
    - `README.md`'s version badge.
 3. Validate before committing (see `CLAUDE.md` > "Validating changes"):
    YAML/JSON parse, Python `py_compile`, cross-file entity-reference grep
