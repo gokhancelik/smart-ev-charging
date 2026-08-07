@@ -1,0 +1,11 @@
+install_dashboard:
+  name: Install dashboard
+  description: >-
+    Install or update the Smart EV Charging Lovelace dashboard.
+  fields: {}
+
+uninstall_dashboard:
+  name: Uninstall dashboard
+  description: >-
+    Remove the Smart EV Charging Lovelace dashboard.
+  fields: {}

@@ -42,10 +42,14 @@ except ImportError:  # pragma: no cover - mocked/test environments
     _INTERNAL_IMPORTS_OK = False
 
 
-def load_dashboard_config() -> dict[str, Any]:
+async def load_dashboard_config(hass: HomeAssistant) -> dict[str, Any]:
     """Load the bundled dashboard YAML into a Lovelace config dict."""
     path = _INTEGRATION_DIR / "dashboards" / "dashboard.yaml"
-    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+    def _load() -> dict[str, Any]:
+        return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+    return await hass.async_add_executor_job(_load)
 
 
 def is_dashboard_installed(hass: HomeAssistant) -> bool:
@@ -151,7 +155,7 @@ async def _create_storage_dashboard(
 async def install_dashboard(hass: HomeAssistant) -> bool:
     """Load the bundled config and install/update the dashboard."""
     try:
-        config = load_dashboard_config()
+        config = await load_dashboard_config(hass)
     except Exception:  # noqa: BLE001
         _LOGGER.exception("Failed to load the bundled dashboard config.")
         return False

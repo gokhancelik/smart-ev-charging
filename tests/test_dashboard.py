@@ -26,7 +26,13 @@ def _lovelace_hass(existing=None) -> MagicMock:
 
 
 def test_load_dashboard_config_returns_yaml_dict():
-    d = dash.load_dashboard_config()
+    hass = MagicMock()
+
+    async def run_in_executor(func):
+        return func()
+
+    hass.async_add_executor_job = run_in_executor
+    d = _run(dash.load_dashboard_config(hass))
     assert isinstance(d, dict)
     assert d.get("title") == "Smart EV Charging"
     assert isinstance(d.get("views"), list)
@@ -131,7 +137,9 @@ class TestInstallDashboard:
         hass = _lovelace_hass(existing=existing)
 
         with patch.object(
-            dash, "load_dashboard_config", return_value={"title": "Smart EV Charging"}
+            dash,
+            "load_dashboard_config",
+            AsyncMock(return_value={"title": "Smart EV Charging"}),
         ):
             ok = _run(dash.install_dashboard(hass))
 
@@ -142,7 +150,9 @@ class TestInstallDashboard:
         hass = _lovelace_hass()
         with (
             patch.object(
-                dash, "load_dashboard_config", side_effect=RuntimeError("boom")
+                dash,
+                "load_dashboard_config",
+                AsyncMock(side_effect=RuntimeError("boom")),
             ),
             patch.object(dash, "_LOGGER"),
         ):

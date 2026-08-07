@@ -5,6 +5,30 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.2] - 2026-08-07
+
+### Fixed
+
+- The `sensor.ev_charging_duration` template returned a TypeError
+  ("can't subtract offset-naive and offset-aware datetimes") because it
+  subtracted a timezone-naive `strptime` result from `now()`. It now
+  compares naive/aware values via `timestamp()`, so the sensor renders
+  correctly while charging.
+- The `input_number.ev_charge_start_energy` helper had `max: 1000 kWh`,
+  but the EV energy meter commonly reads far higher (e.g. 4600+ kWh), so
+  seeding the start-energy helper during a charge raised
+  "Invalid value ... (range 0.0 - 1000.0)" and halted the automation.
+  Raised the max to 100000 kWh.
+- `sensor.ev_charging_session_energy` used `state_class: measurement`
+  with `device_class: energy`, which Home Assistant rejects (expects a
+  `total_increasing`/`total` class). Changed to `total_increasing`.
+- The integration registered dashboard services but shipped no
+  `services.yaml`, producing "Failed to load services.yaml for
+  integration: smart_ev_charging". Added `services.yaml`.
+- `dashboard.load_dashboard_config()` did blocking file I/O
+  (`Path.read_text`) inside the event loop. It now reads the bundled YAML
+  in the executor.
+
 ## [1.5.1] - 2026-08-07
 
 ### Fixed
