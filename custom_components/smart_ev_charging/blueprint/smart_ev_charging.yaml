@@ -84,6 +84,17 @@ blueprint:
           step: 5
           unit_of_measurement: min
 
+    dry_run:
+      name: Dry Run (Debug Only)
+      description: >
+        When enabled, the automation evaluates every decision and logs it
+        to the EV debug log but does NOT actually start or stop the
+        charger. Use this to verify triggers and conditions work before
+        letting it control your charger.
+      default: false
+      selector:
+        boolean: {}
+
 variables:
   vehicle_connected: binary_sensor.ev_vehicle_connected
   charging_active: binary_sensor.ev_charging_active
@@ -93,6 +104,7 @@ variables:
   cheap_price: binary_sensor.ev_price_cheap
   notify_targets: !input notify_targets
   deadline_lead_time_minutes: !input deadline_lead_time_minutes
+  dry_run: !input dry_run
 
 triggers:
   # 1. Cable plugged in
@@ -229,8 +241,20 @@ actions:
               - action: script.ev_debug_log
                 data:
                   message: "Starting: price is cheap ({{ states(current_price) }})"
-          - choose: []
-            default: !input start_charging_action
+          - if:
+              - condition: template
+                value_template: "{{ not dry_run }}"
+            then:
+              - choose: []
+                default: !input start_charging_action
+            else:
+              - if:
+                  - condition: template
+                    value_template: "{{ has_value('script.ev_debug_log') }}"
+                then:
+                  - action: script.ev_debug_log
+                    data:
+                      message: "DRY RUN: start charging action skipped"
 
       # -----------------------------------------------------------------
       # Price became expensive: stop charging if we are the ones charging
@@ -255,8 +279,20 @@ actions:
               - action: script.ev_debug_log
                 data:
                   message: "Stopping: price is no longer cheap ({{ states(current_price) }})"
-          - choose: []
-            default: !input stop_charging_action
+          - if:
+              - condition: template
+                value_template: "{{ not dry_run }}"
+            then:
+              - choose: []
+                default: !input stop_charging_action
+            else:
+              - if:
+                  - condition: template
+                    value_template: "{{ has_value('script.ev_debug_log') }}"
+                then:
+                  - action: script.ev_debug_log
+                    data:
+                      message: "DRY RUN: stop charging action skipped"
 
       # -----------------------------------------------------------------
       # Charging actually started: seed session data (idempotent) and
@@ -306,8 +342,20 @@ actions:
               - action: script.ev_debug_log
                 data:
                   message: "Stopping: target battery percentage reached ({{ states(battery_percentage) }}%)"
-          - choose: []
-            default: !input stop_charging_action
+          - if:
+              - condition: template
+                value_template: "{{ not dry_run }}"
+            then:
+              - choose: []
+                default: !input stop_charging_action
+            else:
+              - if:
+                  - condition: template
+                    value_template: "{{ has_value('script.ev_debug_log') }}"
+                then:
+                  - action: script.ev_debug_log
+                    data:
+                      message: "DRY RUN: stop charging action skipped"
 
       # -----------------------------------------------------------------
       # Periodic check: low-battery emergency override + departure deadline
@@ -341,8 +389,20 @@ actions:
                       - action: script.ev_debug_log
                         data:
                           message: "Starting: low battery emergency ({{ states(battery_percentage) }}%)"
-                  - choose: []
-                    default: !input start_charging_action
+                  - if:
+                      - condition: template
+                        value_template: "{{ not dry_run }}"
+                    then:
+                      - choose: []
+                        default: !input start_charging_action
+                    else:
+                      - if:
+                          - condition: template
+                            value_template: "{{ has_value('script.ev_debug_log') }}"
+                        then:
+                          - action: script.ev_debug_log
+                            data:
+                              message: "DRY RUN: start charging action skipped"
 
               # Departure deadline approaching: force start regardless of price
               - conditions:
@@ -373,8 +433,20 @@ actions:
                       - action: script.ev_debug_log
                         data:
                           message: "Starting: departure deadline approaching"
-                  - choose: []
-                    default: !input start_charging_action
+                  - if:
+                      - condition: template
+                        value_template: "{{ not dry_run }}"
+                    then:
+                      - choose: []
+                        default: !input start_charging_action
+                    else:
+                      - if:
+                          - condition: template
+                            value_template: "{{ has_value('script.ev_debug_log') }}"
+                        then:
+                          - action: script.ev_debug_log
+                            data:
+                              message: "DRY RUN: start charging action skipped"
 
       # -----------------------------------------------------------------
       # Periodic refresh of the live "charging" notification so battery
@@ -411,8 +483,20 @@ actions:
               - action: script.ev_debug_log
                 data:
                   message: "Starting: manual 'Charge now' request"
-          - choose: []
-            default: !input start_charging_action
+          - if:
+              - condition: template
+                value_template: "{{ not dry_run }}"
+            then:
+              - choose: []
+                default: !input start_charging_action
+            else:
+              - if:
+                  - condition: template
+                    value_template: "{{ has_value('script.ev_debug_log') }}"
+                then:
+                  - action: script.ev_debug_log
+                    data:
+                      message: "DRY RUN: start charging action skipped"
 
       # -----------------------------------------------------------------
       # Manual "Stop charging" request. Always resets the request pulse,
@@ -434,8 +518,20 @@ actions:
                   - action: script.ev_debug_log
                     data:
                       message: "Stopping: manual 'Stop charging' request"
-              - choose: []
-                default: !input stop_charging_action
+              - if:
+                  - condition: template
+                    value_template: "{{ not dry_run }}"
+                then:
+                  - choose: []
+                    default: !input stop_charging_action
+                else:
+                  - if:
+                      - condition: template
+                        value_template: "{{ has_value('script.ev_debug_log') }}"
+                    then:
+                      - action: script.ev_debug_log
+                        data:
+                          message: "DRY RUN: stop charging action skipped"
           - action: input_boolean.turn_off
             target:
               entity_id: input_boolean.ev_stop_charging_requested

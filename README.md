@@ -6,7 +6,7 @@ level is reached. Works with *any* EV/charger integration — you point it at
 your existing vehicle/charger/price entities once, through a normal
 Home Assistant config flow; a package and blueprint do the rest.
 
-![version](https://img.shields.io/badge/version-1.5.2-blue)
+![version](https://img.shields.io/badge/version-1.6.0-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ---
@@ -215,6 +215,13 @@ them from step 1. It only needs:
   entities).
 - **Departure Deadline Lead Time** — how many minutes before departure to
   force-start if price still isn't cheap (default 120)
+- **Dry Run (Debug Only)** — leave **off** for normal operation. Turn it
+  **on** to make the automation evaluate every decision and write it to
+  the EV debug log (`input_text.ev_last_charging_decision`, visible on
+  the debug section of the dashboard and via
+  `script.ev_debug_log`/Logbook) **without actually starting or stopping
+  the charger**. Use this to verify your triggers and conditions work
+  safely before letting the automation control real hardware.
 
 ### 3. Add the dashboard
 

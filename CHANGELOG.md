@@ -5,6 +5,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.0] - 2026-08-10
+
+### Added
+
+- New **Dry Run** blueprint input (default off). When enabled, the
+  automation evaluates every decision and writes it to the EV debug log
+  but does NOT actually start or stop the charger. Useful for verifying
+  triggers/conditions safely before letting the automation touch real
+  hardware. All seven start/stop action call sites are guarded.
+
 ## [1.5.2] - 2026-08-07
 
 ### Fixed
