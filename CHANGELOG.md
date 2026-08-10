@@ -5,6 +5,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.1] - 2026-08-10
+
+### Fixed
+
+- `sensor.ev_charging_session_cost` used a Jinja template in its
+  `unit_of_measurement`. Home Assistant stores that field verbatim for
+  template sensors (it is not rendered), so the dashboard tile showed the
+  raw template text after the value (e.g. "2.18 {{ ... }}"). The unit is
+  now a literal `EUR` (matching the plugin's existing EUR price units), so
+  the tile displays "2.18 EUR".
+
 ## [1.6.0] - 2026-08-10
 
 ### Added
