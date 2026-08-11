@@ -101,7 +101,7 @@ class SmartEvChargingMirrorBinarySensor(BinarySensorEntity):
         on_states: list[str] | None = None,
     ) -> None:
         self._source_entity_id = source_entity_id
-        self._on_states = on_states or []
+        self._on_states = [(s or "").strip().lower() for s in (on_states or [])]
         self._attr_name = name
         self._attr_icon = icon
         self._attr_unique_id = f"{entry.entry_id}_{object_id}"

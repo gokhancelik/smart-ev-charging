@@ -47,9 +47,17 @@ ev_debug_log:
 # Internal: send the same notification to one or more notify devices.
 # notify_targets holds device IDs picked via the blueprint's device
 # selector (always a list; a bare string is tolerated too, e.g. if
-# someone calls this script by hand). notify.send_message fans the
-# message out to every device natively — no manual loop needed. Requires
-# Home Assistant 2026.5+ (mobile_app notify entities).
+# someone calls this script by hand).
+#
+# The modern notify.send_message action (HA 2026.5+) fans out to many
+# devices via device_id but only accepts message/title — a nested "data"
+# payload (tag, actions, channel, ...) is rejected with "extra keys not
+# allowed @ data['data']". The companion-app notifications this package
+# relies on (update-in-place tags, actionable buttons) need that payload,
+# so each device is resolved to its legacy mobile_app notify service
+# (notify.mobile_app_<device>), which still accepts data. If a device
+# can't be resolved, message/title are sent via notify.send_message as a
+# best-effort fallback.
 # ------------------------------------------------------------------
 ev_send_notification:
   alias: "EV - Send Notification"
@@ -71,13 +79,37 @@ ev_send_notification:
   sequence:
     - variables:
         targets: "{{ [notify_targets] if notify_targets is string else notify_targets }}"
-    - action: notify.send_message
-      target:
-        device_id: "{{ targets }}"
-      data:
-        title: "{{ title | default('') }}"
-        message: "{{ message }}"
-        data: "{{ notification_data | default({}) }}"
+        target_services: >-
+          {% set ns = namespace(services=[]) %}
+          {% for device_id in targets %}
+            {% for entity in device_entities(device_id) | select('search', '^notify\\.') | list | unique %}
+              {% set ns.services = ns.services + ['notify.mobile_app_' ~ (entity | regex_replace('^notify\\.', ''))] %}
+            {% endfor %}
+          {% endfor %}
+          {{ ns.services }}
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ (target_services | length) > 0 }}"
+          sequence:
+            - repeat:
+                for_each: "{{ target_services }}"
+                sequence:
+                  - service_template: "{{ repeat.item }}"
+                    data:
+                      title: "{{ title | default('') }}"
+                      message: "{{ message }}"
+                      data: "{{ notification_data | default({}) }}"
+        - conditions:
+            - condition: template
+              value_template: "{{ (target_services | length) == 0 }}"
+          sequence:
+            - action: notify.send_message
+              target:
+                device_id: "{{ targets }}"
+              data:
+                title: "{{ title | default('') }}"
+                message: "{{ message }}"
 
 # ------------------------------------------------------------------
 # Internal: seed session tracking helpers exactly once per session
@@ -217,6 +249,7 @@ ev_notify_charging_finished:
         price_unit: "{{ (state_attr('sensor.ev_charging_price', 'unit_of_measurement') or 'EUR/kWh') }}"
     # Dismiss the persistent charging notification (works on both platforms)
     - action: script.ev_send_notification
+      continue_on_error: true
       data:
         notify_targets: "{{ notify_targets }}"
         message: "clear_notification"
@@ -231,6 +264,7 @@ ev_notify_charging_finished:
           value_template: "{{ energy_added > 0 }}"
       then:
         - action: script.ev_send_notification
+          continue_on_error: true
           data:
             notify_targets: "{{ notify_targets }}"
             title: "✅ Charging finished"

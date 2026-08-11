@@ -5,6 +5,36 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.2] - 2026-08-11
+
+### Fixed
+
+- Notifications sent via `script.ev_send_notification` failed with
+  "Template rendered invalid service" when the blueprint's "Notify Devices"
+  field used device IDs. The script's service-name template used Jinja's
+  literal `replace` (not a regex) to strip the `notify.` prefix, producing
+  malformed services like `notify.mobile_app_notify.iphone_cansu`. It now
+  uses `regex_replace`, so each target resolves to its real
+  `notify.mobile_app_*` service and notifications (including the "extra
+  keys not allowed @ data['data']" era) are delivered correctly.
+- `binary_sensor.ev_vehicle_connected`/`ev_charging_active` mirrors now
+  normalize configured matching states (lowercase + trim) before
+  comparing, so legacy configs that saved values like "Awaiting start" or
+  "Waiting for autorization" match the source sensor's actual states
+  (e.g. `awaiting_start`, `awaiting_authorization`) instead of silently
+  staying off. Also confirmed the full connected-state set including
+  `charging`, `ready_to_charge` and `completed` is recognized — re-running
+  Configure and marking those states keeps the connected mirror on for the
+  whole session.
+- Session bookkeeping survived notification failures: `ev_notify_charging_finished`
+  called the notification script *before* `ev_log_charging_session`, so when a
+  notify call failed the script aborted and the session was never logged — leaving
+  `ev_session_tracking` stuck on and every later `charging_started` skipping the
+  re-seed, which made the dashboard's "Current Session" show stale start
+  time/energy/cost (e.g. a 4-day, 100-hour session) forever. The notify steps now
+  use `continue_on_error: true` so the session is always logged and reset
+  correctly.
+
 ## [1.6.1] - 2026-08-10
 
 ### Fixed
