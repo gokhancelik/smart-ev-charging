@@ -6,7 +6,7 @@ level is reached. Works with *any* EV/charger integration — you point it at
 your existing vehicle/charger/price entities once, through a normal
 Home Assistant config flow; a package and blueprint do the rest.
 
-![version](https://img.shields.io/badge/version-1.6.3-blue)
+![version](https://img.shields.io/badge/version-1.6.4-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ---
@@ -171,6 +171,31 @@ The picker is pre-filled with the states your status sensor can actually
 report, so you don't need to type (or mistype) them by hand. Leave it empty
 if your source is a real binary_sensor — the integration then falls back to
 plain on/off, unchanged from before.
+
+**Example — Easee Oprit (via the official Easee integration).** The Oprit
+exposes a single text status sensor rather than separate connected/charging
+binary sensors, so point both "Vehicle connected" and "Charging active" at
+it and use its own energy/power sensors for the optional fields:
+
+| Integration field | Pick |
+|---|---|
+| Vehicle connected | `sensor.oprit_status` |
+| Charging active | `sensor.oprit_status` |
+| Charging power | `sensor.oprit_power` |
+| Energy meter | `sensor.oprit_lifetime_energy` |
+
+In the "Status sensor states" screen, tick:
+
+- Vehicle connected — `awaiting_authorization`, `awaiting_start`,
+  `ready_to_charge`, `charging`, `completed` (everything except
+  `disconnected`)
+- Charging active — `charging`
+
+Note the Oprit reports its status in lower-case with underscores
+(`ready_to_charge`, `awaiting_start`, …) — not the title-case
+"Ready to Charge" some other Easee/OCPP chargers use. Tick exactly the
+values your sensor reports; matching is case-insensitive but otherwise
+exact, so the picker's pre-filled list is your safest reference.
 
 The integration exposes what you picked under stable entity IDs
 (`binary_sensor.ev_vehicle_connected`, `binary_sensor.ev_charging_active`,

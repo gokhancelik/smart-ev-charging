@@ -5,6 +5,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.4] - 2026-08-11
+
+### Added
+
+- README: worked example for the Easee Oprit (official Easee integration),
+  showing the `sensor.oprit_status` status states to mark for "Vehicle
+  connected" / "Charging active" (lower-case underscore values like
+  `ready_to_charge`, `awaiting_start`, `charging`) and the Oprit's own
+  `sensor.oprit_power` / `sensor.oprit_lifetime_energy` for the optional
+  power/energy fields.
+
 ## [1.6.3] - 2026-08-11
 
 ### Fixed
