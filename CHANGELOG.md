@@ -5,6 +5,23 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.3] - 2026-08-11
+
+### Fixed
+
+- The lifetime statistics sensors were named "EV Lifetime Energy"/"EV
+  Lifetime Cost", so Home Assistant registered them as
+  `sensor.ev_lifetime_energy`/`sensor.ev_lifetime_cost` — but the
+  dashboards' "Total energy charged" tile and the `utility_meter`
+  sources (today/week/month energy and cost) all referenced
+  `sensor.ev_charging_lifetime_energy`/`sensor.ev_charging_lifetime_cost`,
+  which never existed. The tiles showed an unknown entity and the meters
+  sat at `unknown`/0. The sensors are now named "EV Charging Lifetime
+  Energy"/"EV Charging Lifetime Cost" so their entity IDs match every
+  reference. Existing installs: re-run the integration's Options >
+  Install Dashboard (or rename the entities in the Entity registry) to
+  apply the corrected IDs.
+
 ## [1.6.2] - 2026-08-11
 
 ### Fixed

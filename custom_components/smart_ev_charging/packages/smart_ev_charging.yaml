@@ -402,7 +402,7 @@ template:
       # Lifetime accumulators — feed the utility_meter helpers above and
       # remain compatible with the HA Energy Dashboard.
       # ---------------------------------------------------------------
-      - name: "EV Lifetime Energy"
+      - name: "EV Charging Lifetime Energy"
         unique_id: ev_charging_lifetime_energy
         icon: mdi:counter
         unit_of_measurement: kWh
@@ -410,7 +410,7 @@ template:
         state_class: total_increasing
         state: "{{ states('input_number.ev_lifetime_energy_kwh') }}"
 
-      - name: "EV Lifetime Cost"
+      - name: "EV Charging Lifetime Cost"
         unique_id: ev_charging_lifetime_cost
         icon: mdi:cash
         device_class: monetary
@@ -446,7 +446,7 @@ template:
       - name: "EV Smart Charging Version"
         unique_id: ev_smart_charging_version
         icon: mdi:tag-outline
-        state: "1.6.2"
+        state: "1.6.3"
 
   - binary_sensor:
       # ---------------------------------------------------------------
