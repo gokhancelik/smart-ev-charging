@@ -112,7 +112,7 @@ input_number:
   ev_charge_start_price:
     name: "EV Charge Start Price"
     icon: mdi:currency-eur
-    min: -1
+    min: -5
     max: 5
     step: 0.001
     mode: box
@@ -141,7 +141,7 @@ input_number:
   ev_max_acceptable_price:
     name: "EV Maximum Acceptable Price"
     icon: mdi:cash-remove
-    min: -1
+    min: -5
     max: 5
     step: 0.001
     mode: box
@@ -232,8 +232,15 @@ counter:
 
 ########################################################################
 # UTILITY METERS — automatically derive today / this week / this month
-# statistics from the lifetime accumulator sensors below. Home Assistant
+# statistics from the lifetime accumulator sensors above. Home Assistant
 # resets these on its own schedule; no automation logic needed.
+#
+# A meter copies its source's unit_of_measurement and device_class from
+# the source's state attributes on each source update (event-driven), so
+# setup order is irrelevant. Note: meters created while their source had
+# no unit restore unit_of_measurement=None from stored sensor data and
+# only pick the unit up the next time the source state changes (e.g. at
+# the first logged session after an upgrade).
 ########################################################################
 utility_meter:
   ev_charging_cost_daily:
@@ -317,7 +324,7 @@ template:
           {% set charging = is_state('binary_sensor.ev_charging_active', 'on') %}
           {% set start = states('input_datetime.ev_charge_start_time') %}
           {% if charging and start not in ['unknown', 'unavailable', ''] %}
-            {{ (now().timestamp() - strptime(start, '%Y-%m-%d %H:%M:%S').timestamp()) / 60 | round(1) }}
+            {{ ((now().timestamp() - strptime(start, '%Y-%m-%d %H:%M:%S').timestamp()) / 60) | round(1) }}
           {% else %}
             0
           {% endif %}
@@ -384,6 +391,7 @@ template:
         unique_id: ev_estimated_session_cost
         icon: mdi:cash-clock
         device_class: monetary
+        unit_of_measurement: EUR
         state: >-
           {% set capacity = states('input_number.ev_battery_capacity_kwh') | float(0) %}
           {% set target = states('input_number.ev_target_battery_percentage') | float(0) %}
@@ -414,7 +422,8 @@ template:
         unique_id: ev_charging_lifetime_cost
         icon: mdi:cash
         device_class: monetary
-        state_class: total_increasing
+        unit_of_measurement: EUR
+        state_class: total
         state: "{{ states('input_number.ev_lifetime_cost') }}"
 
       - name: "EV Average Session Duration"
@@ -446,7 +455,7 @@ template:
       - name: "EV Smart Charging Version"
         unique_id: ev_smart_charging_version
         icon: mdi:tag-outline
-        state: "1.6.4"
+        state: "1.6.5"
 
   - binary_sensor:
       # ---------------------------------------------------------------
@@ -467,7 +476,7 @@ template:
             {% else %}
               {{ now_t >= start or now_t < end }}
             {% endif %}
-          {% endif %}
+            {% endif %}
 
 ########################################################################
 # NOTIFICATION ACTION LISTENER
@@ -492,7 +501,7 @@ automation:
     actions:
       - variables:
           received_action: "{{ trigger.event.data.action }}"
-      - service: input_text.set_value
+      - action: input_text.set_value
         target:
           entity_id: input_text.ev_last_notification_action
         data:

@@ -55,9 +55,13 @@ ev_debug_log:
 # allowed @ data['data']". The companion-app notifications this package
 # relies on (update-in-place tags, actionable buttons) need that payload,
 # so each device is resolved to its legacy mobile_app notify service
-# (notify.mobile_app_<device>), which still accepts data. If a device
-# can't be resolved, message/title are sent via notify.send_message as a
-# best-effort fallback.
+# (notify.mobile_app_<device>), which still accepts data. Services are
+# derived from the device's mobile_app notify *entity* via the entity
+# registry (integration_entities) rather than string surgery, and each
+# guess is validated against the registered services, so a wrong guess
+# degrades to the notify.send_message fallback below instead of failing
+# the run. If a device can't be resolved, message/title are sent via
+# notify.send_message as a best-effort fallback.
 # ------------------------------------------------------------------
 ev_send_notification:
   alias: "EV - Send Notification"
@@ -81,12 +85,18 @@ ev_send_notification:
         targets: "{{ [notify_targets] if notify_targets is string else notify_targets }}"
         target_services: >-
           {% set ns = namespace(services=[]) %}
+          {% set mobile_notify = integration_entities('mobile_app') | select('search', '^notify\\.') | list %}
           {% for device_id in targets %}
-            {% for entity in device_entities(device_id) | select('search', '^notify\\.') | list | unique %}
-              {% set ns.services = ns.services + ['notify.mobile_app_' ~ (entity | regex_replace('^notify\\.', ''))] %}
+            {% for entity in device_entities(device_id) %}
+              {% if entity in mobile_notify %}
+                {% set svc = entity | regex_replace('^notify\\.', '') %}
+                {% if svc.startswith('mobile_app_') and has_service('notify', svc) %}
+                  {% set ns.services = ns.services + ['notify.' ~ svc] %}
+                {% endif %}
+              {% endif %}
             {% endfor %}
           {% endfor %}
-          {{ ns.services }}
+          {{ ns.services | unique | list }}
     - choose:
         - conditions:
             - condition: template
@@ -95,7 +105,7 @@ ev_send_notification:
             - repeat:
                 for_each: "{{ target_services }}"
                 sequence:
-                  - service_template: "{{ repeat.item }}"
+                  - action: "{{ repeat.item }}"
                     data:
                       title: "{{ title | default('') }}"
                       message: "{{ message }}"
@@ -190,7 +200,10 @@ ev_notify_plugged_in:
 # ------------------------------------------------------------------
 ev_notify_charging_started:
   alias: "EV - Notify Charging Started / Refresh"
-  mode: single
+  # queued, not single: this script is driven by BOTH the charging_started
+  # trigger and a 5-minute refresh trigger; overlapping runs would otherwise
+  # log "already running" warnings.
+  mode: queued
   fields:
     notify_targets:
       description: One or more mobile_app device IDs to send to.
@@ -244,7 +257,17 @@ ev_notify_charging_finished:
         - stop: "No tracked session to finish."
     - variables:
         energy_added: "{{ states('sensor.ev_charging_session_energy') | float(0) }}"
-        duration_min: "{{ states('sensor.ev_charging_duration') | float(0) | round(0, 'floor') | int }}"
+        # ev_charging_duration is gated on charging being active, which has
+        # already flipped off by the time this script runs (charging_stopped
+        # trigger). Compute the elapsed time from the seeded start datetime
+        # instead, so duration is never recorded as 0.
+        duration_min: >-
+          {% set start = states('input_datetime.ev_charge_start_time') %}
+          {% if start not in ['unknown', 'unavailable', ''] %}
+            {{ ((now() - strptime(start, '%Y-%m-%d %H:%M:%S')).total_seconds() / 60) | round(0, 'floor') | int }}
+          {% else %}
+            0
+          {% endif %}
         avg_price: "{{ states('sensor.ev_average_charging_price') | float(0) }}"
         price_unit: "{{ (state_attr('sensor.ev_charging_price', 'unit_of_measurement') or 'EUR/kWh') }}"
     # Dismiss the persistent charging notification (works on both platforms)
@@ -333,6 +356,11 @@ ev_charge_now:
   alias: "EV - Charge Now"
   mode: single
   sequence:
+    # Pulse the override so a repeat press always produces a state edge for
+    # the blueprint's manual_charge_now trigger (it only fires on to: "on").
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.ev_charge_now_override
     - action: input_boolean.turn_on
       target:
         entity_id: input_boolean.ev_charge_now_override
@@ -341,6 +369,11 @@ ev_stop_charging:
   alias: "EV - Stop Charging"
   mode: single
   sequence:
+    # Pulse the request so a repeat press always produces a state edge for
+    # the blueprint's manual_stop_requested trigger (it only fires on to: "on").
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.ev_stop_charging_requested
     - action: input_boolean.turn_on
       target:
         entity_id: input_boolean.ev_stop_charging_requested

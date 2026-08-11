@@ -11,12 +11,14 @@ repo: a real Python integration (`custom_components/smart_ev_charging/`,
 HACS category **Integration**) that owns entity configuration via a config
 flow, plus a Home Assistant **package** (YAML) that owns all the derived
 sensors, statistics, and helpers, plus a **blueprint** that owns the
-plug/price decision logic. There is no build system and no automated test
-suite — "development" means authoring/editing Python and YAML and
-validating each parses and is internally consistent (see "Validating
-changes" below); the Python side has never been exercised against a
-running Home Assistant instance (no `homeassistant` package available in
-this environment — see the Integration section below).
+  plug/price decision logic. There is no build system — "development"
+  means authoring/editing Python and YAML, validating each parses and is
+  internally consistent (see "Validating changes" below), and running the
+  self-contained `tests/` suite (`python -m pytest tests -q`). The Python
+  side has never been exercised against a running Home Assistant instance
+  (no `homeassistant` package available in this environment — see the
+  Integration section below); live validation happens on the Dockerized
+  HA instance.
 
 An earlier iteration of this project was pure YAML (no Python), installed
 via HACS's "Package" category. That category was removed from HACS
@@ -67,7 +69,16 @@ syntax errors, and `json.load()` each `.json` file. There is no
 runs this against a real Home Assistant instance. Flag this limitation
 rather than claiming the integration is verified.
 
-There's no automated test suite. When making entity-touching changes,
+There's no automated test suite beyond `tests/`, which is stub-module
+based (Home Assistant packages mocked out in `tests/conftest.py`; it does
+*not* use `pytest-homeassistant-custom-component`) and runs anywhere with
+just pytest:
+
+```bash
+python -m pytest tests -q
+```
+
+When making entity-touching changes,
 manually trace call sites across files (see "Entity naming and cross-file
 coupling" below) — that coupling is the main source of bugs in this repo,
 not syntax.
@@ -94,25 +105,28 @@ Five pieces cooperate and none is self-sufficient:
    `sensor.py` also exposes a diagnostic `sensor.ev_smart_charging_config`
    whose attributes hold the full configured entity map (used by the
    blueprint's departure-calendar lookup and the dashboards' Debug section).
-   `__init__.py` also owns **best-effort auto-install**: on
-   `async_setup_entry`, it copies the bundled
-   `custom_components/smart_ev_charging/blueprint/smart_ev_charging.yaml`
-   and `custom_components/smart_ev_charging/dashboards/dashboard.yaml`
-   into the user's `<config>/blueprints/.../` and `<config>/dashboards/`.
-   The two use *different* overwrite policies, deliberately — see
-   `_install_bundled_assets`'s docstring: the blueprint is re-synced
-   (overwritten) whenever its bundled content differs from what's on
-   disk, on every setup/restart, because that's the only way a blueprint
-   bugfix in a new release reaches someone who already installed an
-   earlier version — blueprints are customized via the automation's
-   inputs, not by hand-editing the blueprint file. The dashboard is
-   written once and never touched again, since dashboards are commonly
-   hand-customized after import and overwriting would destroy that. Don't
-   change the blueprint to "only if missing" — that was the actual bug
-   that shipped in 1.3.0 (an `action` selector input spliced under an
-   `action:` key instead of as a bare sequence item, caught by a user
-   error report, fixed in 1.3.1) and had no way to reach existing
-   installs until this sync-on-diff behavior was added.
+    `__init__.py` also owns **best-effort auto-install**: on
+    `async_setup_entry`, it copies the bundled
+    `custom_components/smart_ev_charging/blueprint/smart_ev_charging.yaml`,
+    `packages/smart_ev_charging.yaml` and
+    `scripts/smart_ev_charging_scripts.yaml` into the user's config
+    directory. These use *different* overwrite policies, deliberately — see
+    `_install_bundled_assets`'s docstring: the blueprint is re-synced
+    (overwritten) whenever its bundled content differs from what's on
+    disk, on every setup/restart, because that's the only way a blueprint
+    bugfix in a new release reaches someone who already installed an
+    earlier version — blueprints are customized via the automation's
+    inputs, not by hand-editing the blueprint file. The package and
+    scripts are copied once and never touched again (they're commonly
+    hand-tweaked after install). The dashboard is *not* copied as a YAML
+    file at all — it's handled separately by `dashboard.py`, which
+    registers it with Lovelace storage (see below) and refreshes it on
+    every HA start while it stays installed. Don't change the blueprint to
+    "only if missing" — that was the actual bug
+    that shipped in 1.3.0 (an `action` selector input spliced under an
+    `action:` key instead of as a bare sequence item, caught by a user
+    error report, fixed in 1.3.1) and had no way to reach existing
+    installs until this sync-on-diff behavior was added.
    `_async_notify_setup_complete` then posts one `persistent_notification`
    summarizing what was
    installed and what's still manual. It owns zero charging *decision*
@@ -150,13 +164,14 @@ Five pieces cooperate and none is self-sufficient:
 
    `start_charging_action`/`stop_charging_action` use `selector: {action: {}}`,
    which resolves to a **list** of action steps, not a service-name
-   string — splice it into a sequence as a bare item (`- !input
-   start_charging_action`), never nest it under an `action:` key (`-
-   action: !input start_charging_action` fails at automation-creation
-   time with "value should be a string for dictionary value", since HA
-   then tries to put a list where a string belongs). This shipped broken
-   in 1.3.0 and was fixed in 1.3.1 — if you ever add another
-   `action`-selector input, use the same bare-item pattern.
+   string. Each call site splices it via the empty-choose trick —
+   `- choose: []` / `default: !input start_charging_action` — never as
+   `- action: !input start_charging_action`, which fails at
+   automation-creation time with "value should be a string for dictionary
+   value" (HA then tries to put a list where a string belongs). This
+   shipped broken in 1.3.0 and was fixed in 1.3.1 — if you ever add
+   another `action`-selector input, use the same pattern, and keep every
+   start/stop call site dry-run guarded (`if not dry_run`).
 4. **`custom_components/smart_ev_charging/scripts/smart_ev_charging_scripts.yaml`**
     — all reusable logic
     (notification building, session bookkeeping, dashboard button targets).
@@ -176,24 +191,37 @@ Five pieces cooperate and none is self-sufficient:
    install). Same information architecture in both. Keep them in sync
    when adding a new sensor/section.
 
-### Why the dashboard isn't auto-registered in the sidebar, but the blueprint is auto-installed
+### Why the dashboard is auto-installed via Lovelace storage, while the blueprint is just a file copy
 
-Both are "just copy a file into the config dir," which `__init__.py`
-does identically for both via plain `shutil.copyfile` in an executor job
-— safe, standard, no special API needed. The difference is what happens
-*after*: a blueprint file dropped into `blueprints/automation/` is
-immediately usable (HA reads blueprints from disk on demand). A
-dashboard *appearing in the sidebar* would require registering it with
-the `lovelace` integration's storage collection, which is an
-undocumented internal (not a stable public API) with a known bug
-(home-assistant/core#165767) where calling it before Lovelace's lazy-load
-completes can silently wipe existing dashboard data. That risk is not
-worth taking for convenience, so the integration copies the dashboard
-YAML to `<config>/dashboards/` and leaves the actual "Add Dashboard from
-YAML" click to the user — see the persistent_notification text in
-`__init__.py` and README's FAQ for how this is explained to users. Don't
-"fix" this by wiring up the Lovelace collection API without re-verifying
-that bug is resolved.
+The blueprint is a YAML file dropped into `blueprints/automation/` — HA
+reads blueprints from disk on demand, so the file copy in `__init__.py` is
+all it takes. A sidebar dashboard can't be created that way: it must be
+registered with Lovelace. `dashboard.py` installs it directly into the
+storage-mode Lovelace store (`lovelace_dashboards`), registers the sidebar
+panel, and saves the bundled config, so the user gets the dashboard in the
+sidebar without pasting YAML. Install / update / uninstall are exposed
+both from the integration's Options menu (`install_dashboard` /
+`uninstall_dashboard` steps) and as the
+`smart_ev_charging.install_dashboard` / `smart_ev_charging.uninstall_dashboard`
+services.
+
+Two deliberate trade-offs, both documented in `dashboard.py`:
+
+1. The install writes the `lovelace_dashboards` store directly rather than
+   going through Lovelace's `DashboardsCollection`. That collection API is
+   an undocumented internal with a known data-loss bug
+   (home-assistant/core#165767) if called before Lovelace's lazy-load
+   completes; the direct write is how this code avoids depending on it —
+   at the cost of the in-memory collection not being told about the new
+   item until restart. Don't rewrite this without re-verifying that bug
+   is resolved.
+2. `rebuild_installed_dashboard` re-saves the bundled config on every
+   `async_setup_entry`, so an installed dashboard is refreshed on each HA
+   start — but only if it's already installed; it never auto-creates for
+   users who didn't opt in. Hand-edited dashboard customizations are
+   therefore overwritten on restart; that's the documented price of
+   shipping card updates automatically. README says the same thing — keep
+   them in agreement.
 
 ### Why the integration's mirror entities exist
 
@@ -239,9 +267,16 @@ picks phones/tablets by name instead of typing a `notify.mobile_app_...`
 service string. `script.ev_send_notification` (in
 `custom_components/smart_ev_charging/scripts/smart_ev_charging_scripts.yaml`)
 is the single place that
-actually sends: it calls `notify.send_message` with
-`target: {device_id: [...]}`, which fans out to every selected device in
-one call — no manual loop. Every other notify-sending script
+actually sends. `notify.send_message` with `target: {device_id: [...]}`
+is the modern fan-out call but rejects the nested `data` payload (tag,
+actions, channel) this package needs, so the script instead resolves each
+device to its legacy `notify.mobile_app_*` service and loops. Resolution
+goes through the entity registry (`integration_entities('mobile_app')` ∩
+`device_entities(device_id)`), and every resolved service is validated
+with `has_service`, so a device whose notify entity was renamed or a
+wrong guess degrades to the `notify.send_message` fallback (message/title
+only, no actions/tag) rather than failing the run. Every other
+notify-sending script
 (`ev_notify_plugged_in`, `ev_notify_charging_started`,
 `ev_notify_charging_finished`) must go through this shared script rather
 than calling a notify action directly, both to avoid duplicating the
@@ -249,13 +284,13 @@ multi-device fan-out and to keep the tag-based dismiss/replace behavior
 consistent across all targets.
 
 This is a deliberate compatibility tradeoff, made explicitly at the
-user's request for a "friendly, not typed" field: `notify.send_message`
-with device/entity `target:` dispatch for mobile_app only works on **Home
-Assistant 2026.5+** (mobile_app notify entities didn't exist before that
-release) — see `hacs.json`'s `homeassistant` field and README's
-Installation section, which must stay in sync with this constraint. Don't
-"restore" the old typed-string dynamic-service-call pattern without
-re-raising this tradeoff — it was the whole point of the change.
+user's request for a "friendly, not typed" field: the device selector and
+the legacy service resolution only work on **Home Assistant 2026.5+**
+(mobile_app notify entities didn't exist before that release) — see
+`hacs.json`'s `homeassistant` field and README's Installation section,
+which must stay in sync with this constraint. Don't "restore" a typed
+service-string field without re-raising this tradeoff — it was the whole
+point of the change.
 
 ### Manual charge-now / stop-charging use pulse booleans, not direct actions
 

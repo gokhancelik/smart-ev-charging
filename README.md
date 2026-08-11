@@ -6,7 +6,7 @@ level is reached. Works with *any* EV/charger integration — you point it at
 your existing vehicle/charger/price entities once, through a normal
 Home Assistant config flow; a package and blueprint do the rest.
 
-![version](https://img.shields.io/badge/version-1.6.4-blue)
+![version](https://img.shields.io/badge/version-1.6.5-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ---
@@ -41,7 +41,7 @@ smart-ev-charging/
 │       ├── blueprint/
 │       │   └── smart_ev_charging.yaml        # canonical blueprint, auto-installed on setup
 │       ├── dashboards/
-│       │   └── dashboard.yaml                # canonical native dashboard, auto-installed on setup
+│       │   └── dashboard.yaml                # canonical native dashboard — installed into Lovelace via Options menu
 │       ├── packages/
 │       │   └── smart_ev_charging.yaml        # helpers, template sensors, statistics — auto-copied to config/packages/
 │       └── scripts/
@@ -55,7 +55,7 @@ smart-ev-charging/
 └── CHANGELOG.md
 ```
 
-The blueprint and native dashboard live inside `custom_components/smart_ev_charging/` — not duplicated at the repo root — because the integration copies them into your config directory automatically on setup (see [Configuration](#configuration)).
+The blueprint and native dashboard live inside `custom_components/smart_ev_charging/` — not duplicated at the repo root — because the integration installs them for you on setup (the blueprint as a file, the dashboard into your Lovelace sidebar — see [Configuration](#configuration)).
 
 ---
 
@@ -205,10 +205,11 @@ The integration exposes what you picked under stable entity IDs
 — the package, scripts, blueprint, and dashboards all read from these, not
 from your raw integration entities directly.
 
-Finishing this step also copies the blueprint and native dashboard YAML
-into your config directory automatically — check the "Smart EV Charging:
-setup" notification (Settings > Notifications) for exactly what was
-installed and what's still left to do.
+Finishing this step also installs the blueprint (as a file under
+`blueprints/automation/`) and the dashboard is registered in your sidebar
+the first time you run the dashboard step in the integration's Options —
+check the "Smart EV Charging: setup" notification (Settings >
+Notifications) for exactly what was installed and what's still left to do.
 
 ### 2. Create the automation from the blueprint
 
@@ -257,9 +258,11 @@ the "Smart EV Charging" dashboard (a native Sections view using only
 built-in cards) in your sidebar and keeps it up to date on every Home
 Assistant start.
 
-If you'd rather add it manually, the file step 1 copied to
-`config/dashboards/smart_ev_charging_dashboard.yaml` can be pasted via
-**Settings > Dashboards > + Add Dashboard > New dashboard from YAML**.
+If you'd rather add it manually, the bundled
+`custom_components/smart_ev_charging/dashboards/dashboard.yaml` (inside
+your Home Assistant config directory, where HACS installed the
+integration) can be pasted via **Settings > Dashboards > + Add Dashboard
+> New dashboard from YAML**.
 Prefer the enhanced version instead? Copy `dashboards/mushroom_dashboard.yaml`
 from this repository (not auto-installed) if you have
 [Mushroom](https://github.com/piitaya/lovelace-mushroom) and

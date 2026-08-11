@@ -44,18 +44,14 @@ _SCRIPTS_DEST_PARTS = ("scripts", "smart_ev_charging_scripts.yaml")
 _NOTIFICATION_ID = "smart_ev_charging_setup"
 
 
-async def _async_install_dashboard_service(
-    hass: HomeAssistant, call: ServiceCall
-) -> None:
+async def _async_install_dashboard_service(call: ServiceCall) -> None:
     """Install or update the Smart EV Charging dashboard."""
-    await install_dashboard(hass)
+    await install_dashboard(call.hass)
 
 
-async def _async_uninstall_dashboard_service(
-    hass: HomeAssistant, call: ServiceCall
-) -> None:
+async def _async_uninstall_dashboard_service(call: ServiceCall) -> None:
     """Remove the Smart EV Charging dashboard."""
-    await uninstall_dashboard(hass)
+    await uninstall_dashboard(call.hass)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -89,6 +85,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    hass.services.async_remove(DOMAIN, SERVICE_INSTALL_DASHBOARD)
+    hass.services.async_remove(DOMAIN, SERVICE_UNINSTALL_DASHBOARD)
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 

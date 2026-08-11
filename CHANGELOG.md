@@ -5,6 +5,89 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.5] - 2026-08-12
+
+### Fixed
+
+- Session duration was always recorded as 0: `ev_notify_charging_finished`
+  read `sensor.ev_charging_duration`, which resets to 0 the moment charging
+  stops — and the script runs exactly then. The "✅ Charging finished"
+  notification showed `0h 0m`, `input_number.ev_lifetime_duration_minutes`
+  never grew, and `sensor.ev_average_session_duration` stayed at 0. The
+  script now computes elapsed time from the seeded `ev_charge_start_time`
+  instead.
+- The duration sensor template applied `round()` to the literal `60`
+  instead of the quotient (Jinja filter precedence) — it emitted full
+  float precision. The division is now wrapped before the filter.
+- Options flow silently wiped stored options: the "Install/uninstall
+  dashboard" steps ended with `async_create_entry(data={})`, replacing
+  `entry.options` with `{}` and reverting any entity re-selection made via
+  Options > Configure. Both steps now re-emit the existing options
+  unchanged.
+- Clearing an optional entity in Options > Configure did nothing: the
+  cleaned config was written to *options*, but the mirror sensors still
+  fell back to `entry.data` (which still held the old value) for any key
+  missing from options. The readers now prefer `entry.options` wholesale
+  once options exist, so a cleared field stays cleared.
+- Plugging in during an already-cheap price window never started charging:
+  the automation was purely edge-triggered (`price_cheap` only fires on a
+  transition). The start decision is now a single shared condition set
+  used by the `price_cheap` trigger, a new "cheap at plug-in" check in the
+  `connected` branch, and a backstop in the 10-minute `periodic_check` —
+  so a vehicle plugged in mid-cheap-window starts within seconds (or the
+  next periodic check), instead of waiting for the next price transition.
+- `ev_charge_now` / `ev_stop_charging` were no-ops on a second press while
+  the pulse boolean was already on. They now pulse (off, then on) so every
+  press produces a state edge.
+- Negative electricity prices (below −1 €/kWh) aborted the session-seed
+  sequence with an out-of-range error, leaving session tracking off
+  mid-session. `ev_charge_start_price` and `ev_max_acceptable_price` now
+  accept prices down to −5 €/kWh.
+- Monetary sensors were missing units: `EV Charging Lifetime Cost` and
+  `EV Estimated Session Cost` had `device_class: monetary` with no
+  `unit_of_measurement`, and lifetime cost used `state_class:
+  total_increasing` (monetary pairs with `total`). Both now carry
+  `EUR` and lifetime cost uses `state_class: total`. (Existing installs:
+  a utility meter copies its source's unit event-driven, so cost meters
+  that were created unitless restore `unit=None` and only show `EUR`
+  once the lifetime-cost source next updates — i.e. at the first logged
+  session after the upgrade.)
+- Notification service resolution in `ev_send_notification` reconstructed
+  `notify.mobile_app_*` service names by string surgery on entity IDs. It
+  now resolves through the entity registry
+  (`integration_entities('mobile_app')` ∩ device entities), filters to
+  genuine mobile_app notify entities, and validates each service with
+  `has_service`, so a wrong guess falls back to `notify.send_message`
+  (message/title only) instead of failing the run. `service_template:` was
+  replaced by a templated `action:`.
+- `ev_notify_charging_started` is driven by both the `charging_started`
+  trigger and a 5-minute refresh; it was `mode: single` and logged
+  "already running" warnings. It is now `mode: queued`.
+- The blueprint's `battery_update` trigger fired on attribute-only changes
+  (no `to:`). It is now a template trigger that only fires when the
+  battery percentage value actually changes.
+- The dashboard install/uninstall services are now removed on config-entry
+  unload instead of leaking.
+- The dashboard's "Current Session" card displayed the session-start helper
+  entities (`input_datetime.ev_charge_start_time`,
+  `input_number.ev_charge_start_price`) as editable controls — and editing
+  them skewed the duration/cost calculations. They're now shown read-only
+  (or "No active session" when nothing is charging); the editable helpers
+  remain in the Debug section, where they belong.
+
+### Documentation
+
+- CLAUDE.md reconciled with the code: the dashboard is installed into
+  Lovelace storage (not copied as a YAML file) and refreshed on every HA
+  start while installed; `ev_send_notification` resolves legacy
+  `notify.mobile_app_*` services rather than calling `notify.send_message`
+  directly; blueprint action inputs use the `- choose: [] / default:
+  !input` splice; the `tests/` suite and its command are documented.
+- README corrected: the bundled dashboard is registered into Lovelace via
+  the integration's Options menu (it is not copied to
+  `config/dashboards/`), and the manual-paste fallback now points at the
+  bundled `custom_components/smart_ev_charging/dashboards/dashboard.yaml`.
+
 ## [1.6.4] - 2026-08-11
 
 ### Added

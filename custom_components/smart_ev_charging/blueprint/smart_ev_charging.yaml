@@ -105,6 +105,19 @@ variables:
   notify_targets: !input notify_targets
   deadline_lead_time_minutes: !input deadline_lead_time_minutes
   dry_run: !input dry_run
+  # The single "should we auto-start right now" decision, shared by the
+  # price_cheap trigger, the connected-during-cheap-window check, and the
+  # periodic_check backstop — kept in one place so the three can't diverge.
+  should_start_charging: >-
+    {{ is_state('binary_sensor.ev_vehicle_connected', 'on')
+       and is_state('input_boolean.ev_follow_price', 'on')
+       and is_state('input_boolean.ev_charge_now_override', 'off')
+       and is_state('binary_sensor.ev_charging_active', 'off')
+       and (is_state('input_boolean.ev_max_price_enabled', 'off')
+            or (states(current_price) | float(0)) <= (states('input_number.ev_max_acceptable_price') | float(1000)))
+       and (is_state('input_boolean.ev_target_battery_enabled', 'off')
+            or states(battery_percentage) in ['unknown', 'unavailable']
+            or (states(battery_percentage) | float(0)) < (states('input_number.ev_target_battery_percentage') | float(100))) }}
 
 triggers:
   # 1. Cable plugged in
@@ -144,10 +157,11 @@ triggers:
     entity_id: binary_sensor.ev_charging_active
     to: "off"
 
-  # 7. Battery percentage updates (only relevant if target-% stop enabled)
+  # 7. Battery percentage updates (only relevant if target-% stop enabled).
+  #    Template trigger so attribute-only changes don't fire the automation.
   - id: battery_update
-    trigger: state
-    entity_id: sensor.ev_battery_percentage
+    trigger: template
+    value_template: "{{ states('sensor.ev_battery_percentage') }}"
 
   # 8. Periodic check for departure deadline / low battery emergency
   - id: periodic_check
@@ -181,7 +195,9 @@ conditions: []
 actions:
   - choose:
       # -----------------------------------------------------------------
-      # Vehicle connected: notify, seed session helpers, check overrides
+      # Vehicle connected: notify, seed session helpers, check overrides.
+      # If the price is already cheap at plug-in time, start immediately —
+      # the price_cheap trigger won't fire because there's no transition.
       # -----------------------------------------------------------------
       - conditions:
           - condition: trigger
@@ -190,6 +206,34 @@ actions:
           - action: script.ev_notify_plugged_in
             data:
               notify_targets: "{{ notify_targets }}"
+          - if:
+              - condition: state
+                entity_id: binary_sensor.ev_price_cheap
+                state: "on"
+              - condition: template
+                value_template: "{{ should_start_charging }}"
+            then:
+              - if:
+                  - condition: template
+                    value_template: "{{ has_value('script.ev_debug_log') }}"
+                then:
+                  - action: script.ev_debug_log
+                    data:
+                      message: "Starting: price is cheap at plug-in ({{ states(current_price) }})"
+              - if:
+                  - condition: template
+                    value_template: "{{ not dry_run }}"
+                then:
+                  - choose: []
+                    default: !input start_charging_action
+                else:
+                  - if:
+                      - condition: template
+                        value_template: "{{ has_value('script.ev_debug_log') }}"
+                    then:
+                      - action: script.ev_debug_log
+                        data:
+                          message: "DRY RUN: start charging action skipped"
 
       # -----------------------------------------------------------------
       # Vehicle disconnected: clear session-only override
@@ -215,24 +259,8 @@ actions:
       - conditions:
           - condition: trigger
             id: price_cheap
-          - condition: state
-            entity_id: binary_sensor.ev_vehicle_connected
-            state: "on"
-          - condition: state
-            entity_id: input_boolean.ev_follow_price
-            state: "on"
-          - condition: state
-            entity_id: binary_sensor.ev_charging_active
-            state: "off"
           - condition: template
-            value_template: >-
-              {{ is_state('input_boolean.ev_max_price_enabled', 'off')
-                 or (states(current_price) | float(0)) <= (states('input_number.ev_max_acceptable_price') | float(1000)) }}
-          - condition: template
-            value_template: >-
-              {{ is_state('input_boolean.ev_target_battery_enabled', 'off')
-                 or states(battery_percentage) in ['unknown', 'unavailable']
-                 or (states(battery_percentage) | float(0)) < (states('input_number.ev_target_battery_percentage') | float(100)) }}
+            value_template: "{{ should_start_charging }}"
         sequence:
           - if:
               - condition: template
@@ -389,6 +417,39 @@ actions:
                       - action: script.ev_debug_log
                         data:
                           message: "Starting: low battery emergency ({{ states(battery_percentage) }}%)"
+                  - if:
+                      - condition: template
+                        value_template: "{{ not dry_run }}"
+                    then:
+                      - choose: []
+                        default: !input start_charging_action
+                    else:
+                      - if:
+                          - condition: template
+                            value_template: "{{ has_value('script.ev_debug_log') }}"
+                        then:
+                          - action: script.ev_debug_log
+                            data:
+                              message: "DRY RUN: start charging action skipped"
+
+              # Connected and waiting for a cheap price, and the price is
+              # already cheap: start. Backstop for the case where the
+              # price_cheap trigger was missed (e.g. plugged in during a
+              # cheap window, or HA restarted mid-wait).
+              - conditions:
+                  - condition: state
+                    entity_id: binary_sensor.ev_price_cheap
+                    state: "on"
+                  - condition: template
+                    value_template: "{{ should_start_charging }}"
+                sequence:
+                  - if:
+                      - condition: template
+                        value_template: "{{ has_value('script.ev_debug_log') }}"
+                    then:
+                      - action: script.ev_debug_log
+                        data:
+                          message: "Starting: connected, price is cheap ({{ states(current_price) }})"
                   - if:
                       - condition: template
                         value_template: "{{ not dry_run }}"

@@ -269,6 +269,7 @@ class SmartEvChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         super().__init__()
+        self._captured: dict = {}
         _LOGGER.debug("Smart EV Charging config flow starting")
 
     async def async_step_user(
@@ -323,7 +324,7 @@ class SmartEvChargingOptionsFlow(config_entries.OptionsFlow):
 
     def __init__(self) -> None:
         super().__init__()
-        self._captured: dict | None = None
+        self._captured: dict = {}
         self._history: dict[str, list[str]] = {}
 
     async def async_step_init(
@@ -370,7 +371,10 @@ class SmartEvChargingOptionsFlow(config_entries.OptionsFlow):
         _LOGGER.info(
             "Smart EV Charging dashboard install %s", "succeeded" if ok else "failed"
         )
-        return self.async_create_entry(title="", data={})
+        # Side-effect step: re-emit the existing options unchanged rather than
+        # replacing entry.options with {}, which would silently wipe any
+        # entity re-selection made through the Configure step.
+        return self.async_create_entry(title="", data=dict(self.config_entry.options))
 
     async def async_step_uninstall_dashboard(
         self, user_input: dict | None = None
@@ -381,7 +385,9 @@ class SmartEvChargingOptionsFlow(config_entries.OptionsFlow):
             "Smart EV Charging dashboard uninstall %s",
             "succeeded" if ok else "failed",
         )
-        return self.async_create_entry(title="", data={})
+        # Side-effect step: re-emit the existing options unchanged (see
+        # async_step_install_dashboard).
+        return self.async_create_entry(title="", data=dict(self.config_entry.options))
 
     async def async_step_states(
         self, user_input: dict | None = None

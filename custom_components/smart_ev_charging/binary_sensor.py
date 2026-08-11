@@ -47,7 +47,10 @@ def _parse_on_states(raw: str | list[str] | None) -> list[str]:
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    config = {**entry.data, **entry.options}
+    # Once options exist they hold the full merged config (the options flow
+    # always re-emits every stored field), so prefer them over entry.data —
+    # falling back to data here would resurrect fields the user cleared.
+    config = dict(entry.options) or dict(entry.data)
 
     async_add_entities(
         [

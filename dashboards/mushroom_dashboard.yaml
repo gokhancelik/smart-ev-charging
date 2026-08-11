@@ -88,8 +88,12 @@ views:
           - type: custom:mushroom-template-card
             primary: Current Session
             secondary: >-
+              {% if is_state('input_boolean.ev_session_tracking', 'on') %}
               Started {{ as_timestamp(states('input_datetime.ev_charge_start_time')) | timestamp_custom('%H:%M', true) }}
               at {{ states('input_number.ev_charge_start_price') }} {{ state_attr('sensor.ev_charging_price', 'unit_of_measurement') }}
+              {% else %}
+              No active session
+              {% endif %}
             icon: mdi:clock-start
           - type: entities
             entities:

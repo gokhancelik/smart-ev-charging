@@ -43,7 +43,11 @@ def test_all_action_calls_are_dry_run_guarded():
         "default: !input stop_charging_action"
     )
     guards = text.count("'{{ not dry_run }}'") + text.count('"{{ not dry_run }}"')
-    assert action_defaults == 7
+    # 6 start sites (price_cheap, connected-during-cheap-window, low-battery
+    # emergency, cheap-wait backstop, departure deadline, manual_charge_now)
+    # + 3 stop sites (price_expensive, battery reached target,
+    # manual_stop_requested).
+    assert action_defaults == 9
     assert guards == action_defaults, (
         "every start/stop action call must be guarded by a dry-run branch"
     )
