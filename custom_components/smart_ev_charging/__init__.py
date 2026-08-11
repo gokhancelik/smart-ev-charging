@@ -85,9 +85,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    hass.services.async_remove(DOMAIN, SERVICE_INSTALL_DASHBOARD)
-    hass.services.async_remove(DOMAIN, SERVICE_UNINSTALL_DASHBOARD)
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        hass.services.async_remove(DOMAIN, SERVICE_INSTALL_DASHBOARD)
+        hass.services.async_remove(DOMAIN, SERVICE_UNINSTALL_DASHBOARD)
+    return unload_ok
 
 
 async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:

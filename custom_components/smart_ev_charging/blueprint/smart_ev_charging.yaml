@@ -158,10 +158,14 @@ triggers:
     to: "off"
 
   # 7. Battery percentage updates (only relevant if target-% stop enabled).
-  #    Template trigger so attribute-only changes don't fire the automation.
+  #    A template trigger would never fire: template triggers fire on a
+  #    falsy->truthy transition of cv.boolean, and a numeric percentage is
+  #    not a valid boolean. State trigger instead; specifying not_to is what
+  #    suppresses attribute-only changes.
   - id: battery_update
-    trigger: template
-    value_template: "{{ states('sensor.ev_battery_percentage') }}"
+    trigger: state
+    entity_id: sensor.ev_battery_percentage
+    not_to: ["unknown", "unavailable"]
 
   # 8. Periodic check for departure deadline / low battery emergency
   - id: periodic_check
@@ -351,8 +355,6 @@ actions:
       - conditions:
           - condition: trigger
             id: battery_update
-          - condition: template
-            value_template: "{{ states(battery_percentage) not in ['unknown', 'unavailable'] }}"
           - condition: state
             entity_id: input_boolean.ev_target_battery_enabled
             state: "on"

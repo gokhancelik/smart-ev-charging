@@ -5,6 +5,58 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.6] - 2026-08-12
+
+### Fixed
+
+- The session-duration fix in 1.6.5 reintroduced the v1.5.2 timezone bug:
+  `ev_notify_charging_finished` subtracted a timezone-naive `strptime`
+  result from `now()`, raising `TypeError` inside the `variables:` step.
+  Because that step is first, the script aborted before dismissing the
+  charging notification, sending the summary, or logging the session —
+  leaving `ev_session_tracking` stuck on so lifetime statistics stopped
+  updating permanently. Elapsed time is now computed via `timestamp()`,
+  which compares naive and aware datetimes safely.
+- Notification delivery was silently dead for every install: the 1.6.5
+  rewrite used `has_service()`, which is **not** a Home Assistant template
+  function (`UndefinedError`), and it required notify entity IDs to already
+  carry the `mobile_app_` prefix. On this and typical installs the entities
+  are `notify.<phone>` and only the legacy *services* are
+  `notify.mobile_app_<phone>`, so nothing resolved and every notification
+  fell back to `notify.send_message`, losing the tag/action `data` payload
+  that the Charge now / Stop charging buttons depend on. Resolution now
+  derives the legacy service name from the registry-found entity (handling
+  both ID shapes) and drops the unavailable `has_service` check.
+- Stop-at-target-battery was dead: the 1.6.5 `battery_update` change made
+  it a *template* trigger, which fires only on a falsy→truthy boolean
+  transition — and a numeric battery percentage isn't a valid boolean, so
+  it never fired. It is a state trigger again (`not_to: unknown,
+  unavailable`), which still suppresses attribute-only changes.
+- The "cleared optional entity" fix was only half-finished: the mirror
+  readers preferred options, but the config-flow **writer** still rebuilt
+  `captured` from the whole stored dict, so a cleared optional entity
+  picker (key omitted by the frontend) was restored from its old value on
+  save. The configure step now carries across only the `*_states` keys, so
+  cleared entities genuinely stay cleared.
+- The dashboard install/uninstall services were removed *before* platform
+  unload; if unload failed the entry stayed loaded with its services gone.
+  They are now removed only after a successful unload.
+
+### Documentation
+
+- CLAUDE.md: the Lovelace storage install bypass and the
+  overwrite-on-restart behavior were already recorded as deliberate
+  trade-offs; the startup race (rebuild silently no-ops if Lovelace isn't
+  loaded during `async_setup_entry`) is now also documented as a known,
+  deliberately unfixed limitation.
+
+### Tests
+
+- `sensor.py` and `binary_sensor.py` now have coverage locking in the
+  "options win wholesale over data" reader contract (a cleared field stays
+  cleared, an options value wins over data, empty options falls back).
+  Test suite is 59 tests (was 54).
+
 ## [1.6.5] - 2026-08-12
 
 ### Fixed
@@ -51,7 +103,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   a utility meter copies its source's unit event-driven, so cost meters
   that were created unitless restore `unit=None` and only show `EUR`
   once the lifetime-cost source next updates — i.e. at the first logged
-  session after the upgrade.)
+  session after the upgrade. Home Assistant may also raise a
+  "units changed" / "state class changed" repair notification for
+  `sensor.ev_charging_lifetime_cost` on the first start after the
+  upgrade; that's expected, not a bug.)
 - Notification service resolution in `ev_send_notification` reconstructed
   `notify.mobile_app_*` service names by string surgery on entity IDs. It
   now resolves through the entity registry

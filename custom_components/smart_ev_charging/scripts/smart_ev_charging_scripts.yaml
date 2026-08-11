@@ -89,10 +89,9 @@ ev_send_notification:
           {% for device_id in targets %}
             {% for entity in device_entities(device_id) %}
               {% if entity in mobile_notify %}
-                {% set svc = entity | regex_replace('^notify\\.', '') %}
-                {% if svc.startswith('mobile_app_') and has_service('notify', svc) %}
-                  {% set ns.services = ns.services + ['notify.' ~ svc] %}
-                {% endif %}
+                {% set slug = entity | regex_replace('^notify\\.', '') %}
+                {% set svc = slug if slug.startswith('mobile_app_') else 'mobile_app_' ~ slug %}
+                {% set ns.services = ns.services + ['notify.' ~ svc] %}
               {% endif %}
             {% endfor %}
           {% endfor %}
@@ -264,7 +263,8 @@ ev_notify_charging_finished:
         duration_min: >-
           {% set start = states('input_datetime.ev_charge_start_time') %}
           {% if start not in ['unknown', 'unavailable', ''] %}
-            {{ ((now() - strptime(start, '%Y-%m-%d %H:%M:%S')).total_seconds() / 60) | round(0, 'floor') | int }}
+            {% set start_dt = strptime(start, '%Y-%m-%d %H:%M:%S') %}
+            {{ ((now().timestamp() - start_dt.timestamp()) / 60) | round(0, 'floor') | int }}
           {% else %}
             0
           {% endif %}

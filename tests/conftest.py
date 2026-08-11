@@ -160,9 +160,25 @@ def _install_ha_stubs() -> None:
 
     ha_components = _module("homeassistant.components")
     ha_bs = _module("homeassistant.components.binary_sensor")
-    ha_bs.BinarySensorDeviceClass = enum.Enum("BinarySensorDeviceClass", "ON OFF")
+    ha_bs.BinarySensorDeviceClass = enum.Enum(
+        "BinarySensorDeviceClass", "ON OFF PLUG BATTERY_CHARGING"
+    )
     ha_bs.BinarySensorEntity = type("BinarySensorEntity", (), {})
     ha_bs.SensorDeviceClass = enum.Enum("SensorDeviceClass", "ENUM")
+
+    ha_sensor = _module("homeassistant.components.sensor")
+    ha_sensor.SensorEntity = type("SensorEntity", (), {})
+    ha_sensor.SensorDeviceClass = enum.Enum(
+        "SensorDeviceClass",
+        "BATTERY ENERGY MONETARY POWER",
+    )
+    ha_sensor.SensorStateClass = enum.Enum(
+        "SensorStateClass",
+        "MEASUREMENT TOTAL TOTAL_INCREASING",
+    )
+
+    ha_helpers_entity = _module("homeassistant.helpers.entity")
+    ha_helpers_entity.EntityCategory = enum.Enum("EntityCategory", "DIAGNOSTIC")
 
 
 _install_ha_stubs()

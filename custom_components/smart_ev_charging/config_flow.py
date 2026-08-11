@@ -343,10 +343,18 @@ class SmartEvChargingOptionsFlow(config_entries.OptionsFlow):
         self._history = {}
         if user_input is not None:
             # The init schema only contains entity pickers, so the submitted
-            # user_input has no *_states keys. Carry the stored ones across so
-            # the previously selected values stay pre-filled on reconfigure.
+            # user_input has no *_states keys. Carry those across so the
+            # previously selected states stay pre-filled on reconfigure —
+            # but only them: carrying the whole stored dict would restore a
+            # cleared optional entity from its old value (the frontend omits
+            # cleared optional pickers, so user_input lacks the key entirely).
             stored = {**self.config_entry.data, **self.config_entry.options}
-            captured = {**stored, **user_input}
+            carried = {
+                k: stored[k]
+                for k in (CONF_VEHICLE_CONNECTED_STATES, CONF_CHARGING_ACTIVE_STATES)
+                if k in stored
+            }
+            captured = {**carried, **user_input}
             if _build_states_schema(self.hass, captured):
                 self._captured = captured
                 self._history = await _analyze_state_history(self.hass, captured)

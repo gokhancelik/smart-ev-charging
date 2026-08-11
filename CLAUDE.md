@@ -221,7 +221,12 @@ Two deliberate trade-offs, both documented in `dashboard.py`:
    users who didn't opt in. Hand-edited dashboard customizations are
    therefore overwritten on restart; that's the documented price of
    shipping card updates automatically. README says the same thing — keep
-   them in agreement.
+   them in agreement. Known limitation, deliberately not "fixed": the
+   rebuild reads `hass.data["lovelace"]` and silently no-ops if Lovelace
+   hasn't loaded yet at `async_setup_entry` time (startup race). The user
+   can always re-run Options > Install Dashboard to force it; wiring this
+   to wait for Lovelace would couple the integration to frontend-internal
+   event ordering for marginal benefit.
 
 ### Why the integration's mirror entities exist
 
