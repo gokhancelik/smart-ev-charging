@@ -42,6 +42,10 @@ class _FakeStates:
     def get(self, entity_id):
         return self._entities.get(entity_id)
 
+    def is_state(self, entity_id, state):
+        obj = self.get(entity_id)
+        return obj is not None and obj.state == state
+
 
 class HomeAssistant:
     def __init__(self):
@@ -179,6 +183,18 @@ def _install_ha_stubs() -> None:
 
     ha_helpers_entity = _module("homeassistant.helpers.entity")
     ha_helpers_entity.EntityCategory = enum.Enum("EntityCategory", "DIAGNOSTIC")
+
+    ha_issue = _module("homeassistant.helpers.issue_registry")
+    ha_issue.IssueSeverity = enum.Enum("IssueSeverity", "ERROR WARNING CRITICAL")
+
+    async def async_create_issue(*_args, **_kwargs):
+        return None
+
+    async def async_delete_issue(*_args, **_kwargs):
+        return None
+
+    ha_issue.async_create_issue = async_create_issue
+    ha_issue.async_delete_issue = async_delete_issue
 
 
 _install_ha_stubs()

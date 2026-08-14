@@ -17,7 +17,13 @@ from pathlib import Path
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import Event, EventStateChangedData, HomeAssistant, ServiceCall, callback
+from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.helpers.issue_registry import (
+    IssueSeverity,
+    async_create_issue,
+    async_delete_issue,
+)
 
 from .const import (
     DOMAIN,
@@ -42,6 +48,8 @@ _PACKAGE_DEST_PARTS = ("packages", "smart_ev_charging.yaml")
 _SCRIPTS_SOURCE = _INTEGRATION_DIR / "scripts" / "smart_ev_charging_scripts.yaml"
 _SCRIPTS_DEST_PARTS = ("scripts", "smart_ev_charging_scripts.yaml")
 _NOTIFICATION_ID = "smart_ev_charging_setup"
+_ISSUE_SMART_CHARGING_DISABLED = "smart_charging_disabled"
+_FOLLOW_PRICE_ENTITY = "input_boolean.ev_follow_price"
 
 
 async def _async_install_dashboard_service(call: ServiceCall) -> None:
@@ -81,6 +89,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         schema=vol.Schema({}),
     )
 
+    # Raise (or clear) the "smart charging is installed but disabled"
+    # repair issue, and keep it in sync live when the toggle flips. The
+    # listener also fires the moment the package's helper appears, so a
+    # package that loads after this integration is still covered.
+    entry.async_on_unload(
+        async_track_state_change_event(
+            hass,
+            [_FOLLOW_PRICE_ENTITY],
+            _build_follow_price_change_handler(hass),
+        )
+    )
+    await _async_update_smart_charging_disabled_issue(hass)
+
     return True
 
 
@@ -119,6 +140,7 @@ def _install_bundled_assets(hass: HomeAssistant) -> tuple[bool, bool, bool, bool
     configuration.yaml already carries both include lines.
     """
     blueprint_synced = _sync_file(hass, _BLUEPRINT_SOURCE, _BLUEPRINT_DEST_PARTS)
+    _remove_legacy_blueprint(hass)
     package_installed = _copy_if_missing(hass, _PACKAGE_SOURCE, _PACKAGE_DEST_PARTS)
     scripts_installed = _copy_if_missing(hass, _SCRIPTS_SOURCE, _SCRIPTS_DEST_PARTS)
     inc = _config_has_includes(hass)
@@ -146,6 +168,74 @@ def _copy_if_missing(
     shutil.copyfile(source, dest)
     _LOGGER.info("Smart EV Charging: installed %s", dest)
     return True
+
+
+def _remove_legacy_blueprint(hass: HomeAssistant) -> bool:
+    """Remove the pre-1.4 root-level blueprint file if it mirrors ours.
+
+    Up to v1.4 the blueprint lived at ``blueprints/automation/
+    smart_ev_charging.yaml`` (no subfolder). That path is never touched by
+    the subfolder sync, so it silently drifts out of date and shows up as a
+    second (broken) entry in the Blueprints UI. Delete only when its content
+    is byte-identical to the bundled copy — a hand-authored or customized
+    file keeps the user's work.
+    """
+    legacy = Path(
+        hass.config.path("blueprints", "automation", "smart_ev_charging.yaml")
+    )
+    if not legacy.exists():
+        return False
+    if legacy.read_bytes() != _BLUEPRINT_SOURCE.read_bytes():
+        _LOGGER.info(
+            "Smart EV Charging: legacy blueprint %s differs from the bundled copy; leaving it in place",
+            legacy,
+        )
+        return False
+    legacy.unlink()
+    _LOGGER.info("Smart EV Charging: removed legacy blueprint %s", legacy)
+    return True
+
+
+async def _async_update_smart_charging_disabled_issue(hass: HomeAssistant) -> None:
+    """Raise or clear the "smart charging is installed but disabled" issue.
+
+    The feature this integration exists to provide is a no-op while
+    ``input_boolean.ev_follow_price`` is off and the charger auto-starts on
+    plug-in — an easy onboarding trap the report diagnosed on a live
+    install. No-ops (rather than raising) if the package's helper isn't
+    loaded yet; the state-change listener covers that case.
+    """
+    state = hass.states.get(_FOLLOW_PRICE_ENTITY)
+    if state is None:
+        _LOGGER.debug(
+            "Smart EV Charging: %s not loaded yet; skipping repair-issue update",
+            _FOLLOW_PRICE_ENTITY,
+        )
+        return
+    if state.state == "off":
+        await async_create_issue(
+            hass,
+            DOMAIN,
+            _ISSUE_SMART_CHARGING_DISABLED,
+            is_fixable=False,
+            is_persistent=False,
+            severity=IssueSeverity.WARNING,
+            translation_key=_ISSUE_SMART_CHARGING_DISABLED,
+        )
+    else:
+        await async_delete_issue(hass, DOMAIN, _ISSUE_SMART_CHARGING_DISABLED)
+
+
+def _build_follow_price_change_handler(
+    hass: HomeAssistant,
+) -> "callback":
+    """Return the toggle-watcher that re-syncs the disabled-toggle repair issue."""
+
+    @callback
+    def _handler(event: Event[EventStateChangedData]) -> None:
+        hass.async_create_task(_async_update_smart_charging_disabled_issue(hass))
+
+    return _handler
 
 
 def _config_has_includes(hass: HomeAssistant) -> bool:

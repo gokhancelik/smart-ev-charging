@@ -95,5 +95,11 @@
         }
       }
     }
+  },
+  "issues": {
+    "smart_charging_disabled": {
+      "title": "Smart charging is installed but disabled",
+      "description": "'EV Smart Charging Enabled' (input_boolean.ev_follow_price) is off, so charging starts immediately on plug-in instead of waiting for a cheap price. Turn it on from the Smart EV Charging dashboard, or run script.ev_enable_smart_charging, to enable price-aware charging."
+    }
   }
 }

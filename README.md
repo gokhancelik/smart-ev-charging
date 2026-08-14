@@ -6,7 +6,7 @@ level is reached. Works with *any* EV/charger integration — you point it at
 your existing vehicle/charger/price entities once, through a normal
 Home Assistant config flow; a package and blueprint do the rest.
 
-![version](https://img.shields.io/badge/version-1.6.6-blue)
+![version](https://img.shields.io/badge/version-1.7.0-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ---
@@ -157,7 +157,7 @@ of re-adding it.
 some OCPP/go-eCharger/Wallbox setups) commonly expose a single text status
 sensor instead — e.g. Easee's charger status reports `Charging`,
 `Completed`, `Car disconnected`, `Awaiting Start`, etc. Point "Vehicle
-Weekend charging active" at that same status sensor. Whenever you
+connected" and "Charging active" at that same status sensor. Whenever you
 pick a status sensor (i.e. anything that isn't a plain `binary_sensor`),
 the flow moves on to a **"Status sensor states"** screen with a picker for
 each one — tick which raw states count as on for that concept (you can
@@ -386,6 +386,31 @@ tracking on startup so duration/energy/cost stay accurate.
 No — it only overrides the current session. It resets automatically when
 you unplug.
 
+**Why does my car start charging the instant I plug it in?**
+Smart charging is switched off. Turn on **"EV Smart Charging Enabled"**
+(`input_boolean.ev_follow_price`) from the dashboard, or run
+`script.ev_enable_smart_charging` — while it's off the system is in
+**Manual** mode and deliberately starts charging immediately on plug-in.
+From v1.7.0 the integration raises a Settings > System > Repairs notice
+while the toggle is off so this can't be missed.
+
+**My charger auto-starts a few seconds after plug-in — is the brief burst
+of charging before it pauses normal?**
+Yes. Most chargers (including Easee) begin drawing power on their own the
+moment the cable is seated, before Home Assistant has even seen the
+"plugged in" event. Since v1.7.0 the automation pauses an auto-started
+charge within ~5–30 s when the price isn't cheap. To avoid the burst
+entirely, disable the charger's own auto-start (for Easee: enable its own
+scheduler/smart-charging and let Smart EV Charging drive it).
+
+**Why did "today"/"this week" energy & cost tiles reset to zero on upgrade
+to 1.7.0?**
+The utility meters were re-sourced from the live charger energy meter and
+a continuous cost integral (they now move *during* a session instead of
+only when a session closes). Changing a meter's source resets its
+accumulated value once — this is expected. The meter values rebuild from
+the new sources going forward.
+
 **How do I get the dashboard into my sidebar?**
 The dashboard is opt-in but automatic: **Settings > Devices & Services >
 Smart EV Charging > ⋮ > Options > Install or update the dashboard**. This
@@ -419,6 +444,10 @@ in the blueprints directory.
 | "Charge now"/"Stop charging" notification buttons do nothing | Confirm the Companion App has notification permissions and background access; check `input_text.ev_last_notification_action` in the Debug dashboard section to see if the event even arrived |
 | Dashboard shows "entity not found" for `automation.smart_ev_charging` | You renamed the automation created from the blueprint — update that one reference in the dashboard YAML |
 | Duration/cost sensors look wrong after a restart | Confirm `input_boolean.ev_session_tracking` reflects the actual charging state — toggle `charging_active` off/on once to resync |
+| "Smart charging is installed but disabled" repair notice in Settings > System > Repairs | `input_boolean.ev_follow_price` ("EV Smart Charging Enabled") is off, so the system is in Manual mode. Turn it on from the dashboard or run `script.ev_enable_smart_charging` to clear the notice |
+| Today/this-week energy & cost tiles freeze mid-session (stay at last session's numbers) | You're on v1.6.6 or earlier. Upgrade to v1.7.0 — the utility meters now track the live charger meter and a continuous cost integral instead of only updating when a session closes |
+| `Long-term statistics start time is in the future` / unit-mismatch warnings for cost/energy long-term statistics | Statistics were compiled before the sensor had a unit. In Developer Tools > Statistics > Fix the issue, update the unit for `sensor.ev_charging_cost_accumulated` (and any merged duplicates), or delete the old statistics and let them rebuild |
+| Upgrading from v1.6.x doesn't apply the new package YAML (meters/charts unchanged) | The package is copied once into `config/packages/` and never overwritten. After upgrading, manually replace `config/packages/smart_ev_charging.yaml` with the new copy from the release and restart, so v1.7.0's re-sourced meters take effect |
 
 Turn on `input_boolean.ev_debug_logging` and watch the Logbook, or check
 the "🐞 Debug" dashboard section — it surfaces every raw helper, every

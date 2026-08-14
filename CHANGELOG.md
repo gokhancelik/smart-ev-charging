@@ -5,6 +5,96 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.7.0] - 2026-08-14
+
+### Breaking changes
+
+- The energy and cost utility meters are re-sourced. `sensor.ev_energy_*`
+  daily/weekly/monthly meters now read the live charger meter
+  (`sensor.ev_energy_meter`) instead of the session-closing
+  `sensor.ev_charging_lifetime_energy`, so they move **during** a session
+  instead of only when a session closes, and discontinued
+  midnight-reset meters no longer drift. Cost meters
+  (`sensor.ev_charging_cost_*`) now read a new Riemann integral
+  `sensor.ev_charging_cost_accumulated` of the live power draw against the
+  live tariff. Because a meter's reading resets when its source changes,
+  every meter value — and the cost/energy dashboard tiles — reset to zero
+  **once** on upgrade; values rebuild from the new sources going forward.
+- Every package helper sensor now carries a `unique_id`, so the entity
+  identities (and their long-term-statistics history) differ from v1.6.x.
+  Merge or remove the stale v1.6.x entities in Developer Tools > Entities
+  once after upgrading.
+- The package YAML is copied into `config/packages/` only if it's missing
+  (`copy_if_missing`), so an existing install keeps the old file on
+  upgrade. Apply this release — including the re-sourced meters — by
+  manually replacing `config/packages/smart_ev_charging.yaml` and
+  restarting (see README Troubleshooting).
+
+### Added
+
+- The automation now pauses a charger that auto-starts the moment the car
+  is plugged in: a `should_stop_charging` decision runs on connect, at
+  charging start, in the periodic check, and at cost thresholds, so the
+  car only keeps drawing after plug-in when the tariff is actually cheap.
+  The manual/emergency paths still charge immediately and unconditionally
+  turn the follow-price override off (as before). The emergency deadline
+  and battery-target routes start charging with the same guarantees as the
+  manual path, now that the charging-started stop check runs before the
+  notification/session-tracking bookkeeping.
+- A Home Assistant repair issue ("Smart charging is installed but
+  disabled") is raised while `input_boolean.ev_follow_price` is off, so a
+  disabled system can't be mistaken for a broken one. It resolves itself
+  the moment the toggle is turned on.
+- `sensor.ev_charging_power_cost` (EUR/h) and the flux-state cost integral
+  `sensor.ev_charging_cost_accumulated` with correct `EUR/h`/`EUR`
+  units, `periodically_resetting: false` and a 5-minute Riemann sampling
+  cap, so the cost sensors produce clean long-term statistics instead of
+  being suppressed by Home Assistant 2025.12+ unit handling.
+- The price-cheap/price-expensive automation triggers now pin both `from`
+  and `to` punctuation (`off`→`on` / `on`→`off`), so the rules listen for
+  the exact crossing instead of the default `on`/`off` semantics, which
+  could leave the automation edge-triggered in a stale state after a
+  restart mid-trigger. The connect/disconnect triggers gained a 10-second
+  debounce so a charger that flaps its status sensor at plug-in won't fire
+  the automation twice.
+- The config flow now auto-unions recorder state options (`binary sensors
+  combined`, etc.) with the config flow's own suggestions, so existing
+  installs whose "connected" states only live in the YAML package keep
+  working without re-ticking states after an upgrade (the union is
+  applied whenever an entry is saved, so it heals automatically).
+
+### Fixed
+
+- Mirror binary sensors (`ev_vehicle_connected`, `ev_price_cheap`, and
+  the new implied-charging mirror) treat `unavailable`/`unknown` source
+  states as *not* a match instead of bouncing between on/off, so the
+  dashboard no longer shows a flickering "connected" during a source gap.
+- `ev_charging_active`'s mirror now stays "on" whenever the implied
+  charging source is on, even if the explicitly configured source flips;
+  the mirror ordering also changed so `charging_active` registers before
+  `price_cheap`, matching the documented entity order.
+- The Blueprint + legacy-sync copy of the blueprint are no longer both
+  written on every helper state; the legacy root path is removed when it
+  matches the bundled file. F13's corrupted README text ("Vehicle Weekend
+  charging active") is fixed.
+
+### Documentation
+
+- README: version badge → 1.7.0; new FAQ entries for instant-start on
+  plug-in, the normal 5–30 s auto-start pause burst, and the one-time
+  meter reset; Troubleshooting rows for the new repair notice, the stale
+  package file after upgrade, and the long-term-statistics unit fix.
+  CLAUDE.md notes updated for the new entities.
+
+### Tests
+
+- Blueprint dry-run guard assertions now count 12 action sites; new checks
+  for `should_stop_charging` variable fragments, `from`/`to` trigger
+  punctuation, and the disconnect debounce. `binary_sensor` tests cover
+  `implied_on_by` and unavailable/unknown handling; config-flow tests
+  cover the auto-union of recorder "binary sensors combined" options.
+  88 tests (was 59).
+
 ## [1.6.6] - 2026-08-12
 
 ### Fixed

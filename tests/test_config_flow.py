@@ -20,6 +20,7 @@ from custom_components.smart_ev_charging.config_flow import (
     _current_states_list,
     _entity_state_options,
     _is_non_binary_source,
+    _union_connected_states,
 )
 from homeassistant.helpers import selector as selector_mod
 
@@ -217,6 +218,57 @@ def test_async_step_user_sensor_source_leads_to_states_step(hass):
 
 def test_clean_drops_empty_values():
     assert _clean({"a": "x", "b": "", "c": [], "d": None}) == {"a": "x"}
+
+
+# ------------------------------------------------------------- _union_connected_states
+
+
+def test_union_adds_charging_states_to_connected_when_same_source():
+    captured = {
+        "vehicle_connected": "sensor.status",
+        "charging_active": "sensor.status",
+        "vehicle_connected_states": ["awaiting_authorization", "awaiting_start"],
+        "charging_active_states": ["charging"],
+    }
+    _union_connected_states(captured)
+    assert captured["vehicle_connected_states"] == [
+        "awaiting_authorization",
+        "awaiting_start",
+        "charging",
+    ]
+
+
+def test_union_leaves_different_sources_untouched():
+    captured = {
+        "vehicle_connected": "sensor.status",
+        "charging_active": "binary_sensor.charging",
+        "vehicle_connected_states": ["charging"],
+        "charging_active_states": ["charging"],
+    }
+    _union_connected_states(captured)
+    assert captured["vehicle_connected_states"] == ["charging"]
+
+
+def test_union_is_idempotent_and_does_not_double_subset():
+    captured = {
+        "vehicle_connected": "sensor.status",
+        "charging_active": "sensor.status",
+        "vehicle_connected_states": ["charging", "completed"],
+        "charging_active_states": ["charging"],
+    }
+    _union_connected_states(captured)
+    _union_connected_states(captured)
+    assert captured["vehicle_connected_states"] == ["charging", "completed"]
+
+
+def test_union_noop_when_no_charging_states_picked():
+    captured = {
+        "vehicle_connected": "sensor.status",
+        "charging_active": "sensor.status",
+        "vehicle_connected_states": ["charging"],
+    }
+    _union_connected_states(captured)
+    assert captured["vehicle_connected_states"] == ["charging"]
 
 
 def test_options_flow_init_shows_menu(hass):

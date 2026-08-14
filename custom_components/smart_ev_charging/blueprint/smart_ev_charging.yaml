@@ -118,30 +118,57 @@ variables:
        and (is_state('input_boolean.ev_target_battery_enabled', 'off')
             or states(battery_percentage) in ['unknown', 'unavailable']
             or (states(battery_percentage) | float(0)) < (states('input_number.ev_target_battery_percentage') | float(100))) }}
+  # The single "should we auto-stop right now" decision. Most chargers
+  # auto-start on plug-in, so by the time this blueprint learns about it
+  # the car is already drawing power. If smart mode is on, nobody pressed
+  # "Charge now", and the price is not cheap, we must pause that charge —
+  # the cheap->expensive transition will never fire for an auto-started
+  # session. Includes cheap_price availability checks so stopping never
+  # hinges on a sensor that is itself unknown/unavailable (e.g. the
+  # nightly price-source gap).
+  should_stop_charging: >-
+    {{ is_state('binary_sensor.ev_vehicle_connected', 'on')
+       and is_state('input_boolean.ev_follow_price', 'on')
+       and is_state('input_boolean.ev_charge_now_override', 'off')
+       and is_state('binary_sensor.ev_charging_active', 'on')
+       and is_state('binary_sensor.ev_price_cheap', 'off')
+       and not is_state('binary_sensor.ev_price_cheap', 'unavailable')
+       and not is_state('binary_sensor.ev_price_cheap', 'unknown') }}
 
 triggers:
-  # 1. Cable plugged in
+  # 1. Cable plugged in (debounced: most chargers ramp through several
+  #    transient statuses in the first few seconds after plug-in; the
+  #    Easee here goes awaiting_authorization -> awaiting_start ->
+  #    charging in ~4s. Waiting avoids acting on each intermediate state,
+  #    and also absorbs the "unknown 0" blips some integrations emit).
   - id: connected
     trigger: state
     entity_id: binary_sensor.ev_vehicle_connected
     to: "on"
+    for: "00:00:10"
 
-  # 2. Cable unplugged
+  # 2. Cable unplugged (debounced the same way as connected)
   - id: disconnected
     trigger: state
     entity_id: binary_sensor.ev_vehicle_connected
     to: "off"
+    for: "00:00:10"
 
-  # 3. Price becomes cheap
+  # 3. Price becomes cheap. `from`/`to` together mean transitions through
+  #    unknown/unavailable (the nightly price-source gap) never fire this —
+  #    only an actual off -> on change, so the phantom "price became cheap"
+  #    on the way back from the gap is filtered out.
   - id: price_cheap
     trigger: state
     entity_id: binary_sensor.ev_price_cheap
+    from: "off"
     to: "on"
 
-  # 4. Price becomes expensive
+  # 4. Price becomes expensive (symmetric to price_cheap)
   - id: price_expensive
     trigger: state
     entity_id: binary_sensor.ev_price_cheap
+    from: "on"
     to: "off"
 
   # 5. Charger reports charging has actually started (may be triggered by
@@ -235,9 +262,41 @@ actions:
                       - condition: template
                         value_template: "{{ has_value('script.ev_debug_log') }}"
                     then:
+                  - action: script.ev_debug_log
+                    data:
+                      message: "DRY RUN: start charging action skipped"
+          - if:
+              # Safety net for chargers that auto-start faster than the
+              # connected trigger can react: if charging is somehow already
+              # active while we're still in the connected branch and the
+              # price is not cheap, pause it here too. Normally this is a
+              # no-op (charging hasn't started yet at connected time); the
+              # debounce makes the trigger fire after the auto-start ramp,
+              # in which case this is the first thing that stops it.
+              - condition: template
+                value_template: "{{ should_stop_charging }}"
+            then:
+              - if:
+                  - condition: template
+                    value_template: "{{ has_value('script.ev_debug_log') }}"
+                then:
+                  - action: script.ev_debug_log
+                    data:
+                      message: "Stopping: price is no longer cheap ({{ states(current_price) }})"
+              - if:
+                  - condition: template
+                    value_template: "{{ not dry_run }}"
+                then:
+                  - choose: []
+                    default: !input stop_charging_action
+                else:
+                  - if:
+                      - condition: template
+                        value_template: "{{ has_value('script.ev_debug_log') }}"
+                    then:
                       - action: script.ev_debug_log
                         data:
-                          message: "DRY RUN: start charging action skipped"
+                          message: "DRY RUN: stop charging action skipped"
 
       # -----------------------------------------------------------------
       # Vehicle disconnected: clear session-only override
@@ -327,6 +386,44 @@ actions:
                       message: "DRY RUN: stop charging action skipped"
 
       # -----------------------------------------------------------------
+      # Charging started but price is not cheap: pause the auto-started
+      # charge. Most chargers begin drawing power on their own a few
+      # seconds after plug-in, before the price_expensive transition could
+      # ever fire — so this is the branch that actually makes plugging in
+      # during an expensive window wait for cheap. Placed before the notify
+      # branch so an intercepted session neither pushes "⚡ Charging" nor
+      # seeds session tracking (the subsequent charging_stopped call then
+      # finds no tracked session and exits without logging a phantom one).
+      # -----------------------------------------------------------------
+      - conditions:
+          - condition: trigger
+            id: charging_started
+          - condition: template
+            value_template: "{{ should_stop_charging }}"
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ has_value('script.ev_debug_log') }}"
+            then:
+              - action: script.ev_debug_log
+                data:
+                  message: "Stopping: price is no longer cheap ({{ states(current_price) }})"
+          - if:
+              - condition: template
+                value_template: "{{ not dry_run }}"
+            then:
+              - choose: []
+                default: !input stop_charging_action
+            else:
+              - if:
+                  - condition: template
+                    value_template: "{{ has_value('script.ev_debug_log') }}"
+                then:
+                  - action: script.ev_debug_log
+                    data:
+                      message: "DRY RUN: stop charging action skipped"
+
+      # -----------------------------------------------------------------
       # Charging actually started: seed session data (idempotent) and
       # send the persistent "charging" notification.
       # -----------------------------------------------------------------
@@ -388,21 +485,25 @@ actions:
                       message: "DRY RUN: stop charging action skipped"
 
       # -----------------------------------------------------------------
-      # Periodic check: low-battery emergency override + departure deadline
+      # Periodic check: low-battery emergency override + departure
+      # deadline + pausing an auto-started charge when the price isn't
+      # cheap. The connected/charging-active guards used to gate this whole
+      # entry; they now live per sub-branch, because the pause path needs
+      # to run while charging IS active.
       # -----------------------------------------------------------------
       - conditions:
           - condition: trigger
             id: periodic_check
-          - condition: state
-            entity_id: binary_sensor.ev_vehicle_connected
-            state: "on"
-          - condition: state
-            entity_id: binary_sensor.ev_charging_active
-            state: "off"
         sequence:
           - choose:
               # Low battery emergency: bypass smart waiting entirely
               - conditions:
+                  - condition: state
+                    entity_id: binary_sensor.ev_vehicle_connected
+                    state: "on"
+                  - condition: state
+                    entity_id: binary_sensor.ev_charging_active
+                    state: "off"
                   - condition: state
                     entity_id: input_boolean.ev_low_battery_emergency_enabled
                     state: "on"
@@ -412,6 +513,12 @@ actions:
                     value_template: >-
                       {{ (states(battery_percentage) | float(100)) <= (states('input_number.ev_low_battery_threshold') | float(0)) }}
                 sequence:
+                  # Mark this session as deliberately charging regardless
+                  # of price, so the charging_started pause branch leaves
+                  # the emergency charge alone. Cleared on unplug.
+                  - action: input_boolean.turn_on
+                    target:
+                      entity_id: input_boolean.ev_charge_now_override
                   - if:
                       - condition: template
                         value_template: "{{ has_value('script.ev_debug_log') }}"
@@ -439,6 +546,12 @@ actions:
               # price_cheap trigger was missed (e.g. plugged in during a
               # cheap window, or HA restarted mid-wait).
               - conditions:
+                  - condition: state
+                    entity_id: binary_sensor.ev_vehicle_connected
+                    state: "on"
+                  - condition: state
+                    entity_id: binary_sensor.ev_charging_active
+                    state: "off"
                   - condition: state
                     entity_id: binary_sensor.ev_price_cheap
                     state: "on"
@@ -470,6 +583,12 @@ actions:
               # Departure deadline approaching: force start regardless of price
               - conditions:
                   - condition: state
+                    entity_id: binary_sensor.ev_vehicle_connected
+                    state: "on"
+                  - condition: state
+                    entity_id: binary_sensor.ev_charging_active
+                    state: "off"
+                  - condition: state
                     entity_id: input_boolean.ev_follow_price
                     state: "on"
                   - condition: template
@@ -489,6 +608,12 @@ actions:
                         {% endif %}
                       {% endif %}
                 sequence:
+                  # Mark this session as deliberately charging regardless
+                  # of price, so the charging_started pause branch leaves
+                  # the deadline forced charge alone. Cleared on unplug.
+                  - action: input_boolean.turn_on
+                    target:
+                      entity_id: input_boolean.ev_charge_now_override
                   - if:
                       - condition: template
                         value_template: "{{ has_value('script.ev_debug_log') }}"
@@ -510,6 +635,43 @@ actions:
                           - action: script.ev_debug_log
                             data:
                               message: "DRY RUN: start charging action skipped"
+
+              # Auto-started charge while the price isn't cheap: pause it.
+              # 10-minute backstop for the charging_started pause branch
+              # (covers e.g. a charger that restarts on its own, a missed
+              # start event, or HA restarting mid-auto-start). Guards are
+              # the same as should_stop_charging.
+              - conditions:
+                  - condition: state
+                    entity_id: binary_sensor.ev_vehicle_connected
+                    state: "on"
+                  - condition: state
+                    entity_id: binary_sensor.ev_charging_active
+                    state: "on"
+                  - condition: template
+                    value_template: "{{ should_stop_charging }}"
+                sequence:
+                  - if:
+                      - condition: template
+                        value_template: "{{ has_value('script.ev_debug_log') }}"
+                    then:
+                      - action: script.ev_debug_log
+                        data:
+                          message: "Stopping: price is no longer cheap ({{ states(current_price) }})"
+                  - if:
+                      - condition: template
+                        value_template: "{{ not dry_run }}"
+                    then:
+                      - choose: []
+                        default: !input stop_charging_action
+                    else:
+                      - if:
+                          - condition: template
+                            value_template: "{{ has_value('script.ev_debug_log') }}"
+                        then:
+                          - action: script.ev_debug_log
+                            data:
+                              message: "DRY RUN: stop charging action skipped"
 
       # -----------------------------------------------------------------
       # Periodic refresh of the live "charging" notification so battery

@@ -228,6 +228,48 @@ Two deliberate trade-offs, both documented in `dashboard.py`:
    to wait for Lovelace would couple the integration to frontend-internal
    event ordering for marginal benefit.
 
+### v1.7.0 architecture notes
+
+- **Package is copy-if-missing — upgrades don't re-apply it.** The user's
+  `config/packages/smart_ev_charging.yaml` is only written when absent
+  (`_copy_if_missing`), so on every upgrade most installs keep the old
+  file. This is deliberate (the file is commonly hand-tweaked), but it
+  means any package-only change — v1.7.0's re-sourced meters, new
+  `sensor.ev_charging_power_cost`, Riemann `sensor.ev_charging_cost_accumulated`,
+  `unique_id`s — requires the user to manually replace the file and
+  restart. The README Troubleshooting row states this; don't "fix" it by
+  making the package overwrite blindly.
+- **Energy meters read the live charger meter; cost meters read a Riemann
+  integral.** `sensor.ev_energy_*` are sourced from `sensor.ev_energy_meter`
+  (monotonically increasing) so "today" moves during a session.
+  `sensor.ev_charging_cost_accumulated` is a `platform: integration` sensor
+  (Riemann, `unit_time: h`, `max_sub_interval: 5 min`, `round: 2`) of
+  `sensor.ev_charging_power_cost` (EUR/h = power × live tariff), and the
+  `sensor.ev_charging_cost_*` meters source *it*. Both flux sensors carry
+  accurate units and the meters set `periodically_resetting: false` so
+  HA 2025.12+ long-term statistics aren't suppressed. Changing a meter's
+  source resets its reading once (documented in CHANGELOG/README).
+- **Auto-start pause is intentional "start then stop", not "prevent".** HA
+  cannot beat the charger to the first watt — `should_stop_charging` (a
+  variable whose fragments cover price-uncheap, battery-target reached,
+  and manual override) runs in the `connected`, `charging_started` (before
+  the notify/session-seeding steps), `periodic_check` (new pause
+  sub-branch), `price_cheap`/`price_expensive`, and `manual_stop_requested`
+  branches and calls `!input stop_charging_action` (dry-run guarded) to
+  pause the ~5–30 s burst. Don't rename it to "should_not_start" — the
+  stop decision is what makes manual/emergency paths unconditional while
+  the paused auto-start is still possible.
+- **Legacy blueprint copy cleanup.** The legacy root-level
+  `blueprints/smart_ev_charging.yaml` copy is removed on setup when it's
+  byte-identical to the bundled blueprint (it was written by an old
+  `_copy_if_missing` style that duplicated the canonical copy); a
+  user-modified copy is left alone.
+- **The "smart charging disabled" repair issue** (`issue_registry`
+  `smart_charging_disabled`) is created whenever
+  `input_boolean.ev_follow_price` is `off` and cleaned up automatically
+  when the helper isn't loaded yet (no-op) or turns `on`. It's the
+  v1.7.0 answer to F2 ("we never knew the system was in Manual mode").
+
 ### Why the integration's mirror entities exist
 
 Lovelace cards need a fixed `entity_id` at dashboard-authoring time — they

@@ -35,6 +35,20 @@ from .const import (
 UNAVAILABLE_STATES = ("unknown", "unavailable")
 
 
+def _is_unavailable(raw: str | None) -> bool:
+    """Whether a raw state should be treated as unavailable.
+
+    Same policy as binary_sensor.py: some integrations (e.g. Easee) emit
+    decorated variants such as ``"unknown 0"``; treat any state whose first
+    word is an unavailable marker as unavailable rather than leaking it
+    through as a real measurement.
+    """
+    stripped = (raw or "").strip()
+    if not stripped:
+        return True
+    return stripped.lower().split()[0] in UNAVAILABLE_STATES
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
@@ -142,7 +156,7 @@ class SmartEvChargingMirrorSensor(SensorEntity):
         self.async_write_ha_state()
 
     def _apply_source_state(self, state) -> None:
-        if state is None or state.state in UNAVAILABLE_STATES:
+        if state is None or _is_unavailable(getattr(state, "state", None)):
             self._attr_available = False
             self._attr_native_value = None
             return

@@ -250,6 +250,37 @@ def _clean(user_input: dict) -> dict:
     return {k: v for k, v in user_input.items() if v}
 
 
+def _union_connected_states(captured: dict) -> dict:
+    """Auto-union charging states into the connected states list.
+
+    When both ``vehicle_connected`` and ``charging_active`` point at the
+    same status sensor, every state that means "charging" must also mean
+    "plugged in" — a vehicle drawing current is necessarily connected.
+    Missing ``charging`` (or ``ready_to_charge``, ``completed``) from the
+    connected list is exactly the F1 failure this prevents; unioning on
+    save makes the mismatch impossible to store. Idempotent; returns the
+    dict it was passed.
+    """
+    if (
+        captured.get(CONF_CHARGING_ACTIVE)
+        and captured.get(CONF_CHARGING_ACTIVE) == captured.get(CONF_VEHICLE_CONNECTED)
+        and captured.get(CONF_CHARGING_ACTIVE_STATES)
+    ):
+        connected = _current_states_list(captured, CONF_VEHICLE_CONNECTED_STATES) or []
+        charging = _current_states_list(captured, CONF_CHARGING_ACTIVE_STATES) or []
+        merged = list(dict.fromkeys([*connected, *charging]))
+        if merged:
+            source = captured[CONF_CHARGING_ACTIVE]
+            _LOGGER.info(
+                "status states: charging implies connected — added %s to the "
+                "vehicle connected states for %s",
+                sorted(set(charging) - set(connected)),
+                source,
+            )
+            captured[CONF_VEHICLE_CONNECTED_STATES] = merged
+    return captured
+
+
 async def _analyze_state_history(
     hass: HomeAssistant, captured: dict
 ) -> dict[str, list[str]]:
@@ -303,6 +334,7 @@ class SmartEvChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         captured = dict(self._captured)
         if user_input is not None:
             merged = _clean({**captured, **user_input})
+            _union_connected_states(merged)
             return self.async_create_entry(title="Smart EV Charging", data=merged)
 
         history = self._history or await _analyze_state_history(self.hass, captured)
@@ -403,6 +435,7 @@ class SmartEvChargingOptionsFlow(config_entries.OptionsFlow):
         captured = dict(self._captured)
         if user_input is not None:
             merged = _clean({**captured, **user_input})
+            _union_connected_states(merged)
             return self.async_create_entry(title="", data=merged)
 
         history = self._history or await _analyze_state_history(self.hass, captured)
