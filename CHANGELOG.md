@@ -5,7 +5,7 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [1.7.0] - 2026-08-14
+## [1.7.0] - 2026-08-27
 
 ### Breaking changes
 
@@ -34,13 +34,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - The automation now pauses a charger that auto-starts the moment the car
   is plugged in: a `should_stop_charging` decision runs on connect, at
-  charging start, in the periodic check, and at cost thresholds, so the
-  car only keeps drawing after plug-in when the tariff is actually cheap.
-  The manual/emergency paths still charge immediately and unconditionally
-  turn the follow-price override off (as before). The emergency deadline
-  and battery-target routes start charging with the same guarantees as the
-  manual path, now that the charging-started stop check runs before the
-  notification/session-tracking bookkeeping.
+  charging start, and in the 10-minute periodic check, so the car only
+  keeps drawing after plug-in when the tariff is actually cheap. Because
+  no charger can be beaten to the first watt, this is deliberately
+  "start, then pause" — expect a 5–30 s burst before the pause lands.
+  The low-battery-emergency and departure-deadline routes now turn
+  `input_boolean.ev_charge_now_override` **on** before starting, which is
+  what exempts them from the pause check; the override is cleared on
+  unplug. The charging-started pause runs before the notification and
+  session-seeding steps, so an intercepted session neither pushes
+  "⚡ Charging" nor logs a phantom session.
 - A Home Assistant repair issue ("Smart charging is installed but
   disabled") is raised while `input_boolean.ev_follow_price` is off, so a
   disabled system can't be mistaken for a broken one. It resolves itself
@@ -57,26 +60,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   restart mid-trigger. The connect/disconnect triggers gained a 10-second
   debounce so a charger that flaps its status sensor at plug-in won't fire
   the automation twice.
-- The config flow now auto-unions recorder state options (`binary sensors
-  combined`, etc.) with the config flow's own suggestions, so existing
-  installs whose "connected" states only live in the YAML package keep
-  working without re-ticking states after an upgrade (the union is
-  applied whenever an entry is saved, so it heals automatically).
+- The config flow auto-unions the "charging active" states into the
+  "vehicle connected" states whenever both fields point at the same status
+  sensor, so a connected list that omits `charging` can no longer be
+  saved. Applied on every save, so an existing entry heals itself the next
+  time Options is submitted.
 
 ### Fixed
 
-- Mirror binary sensors (`ev_vehicle_connected`, `ev_price_cheap`, and
-  the new implied-charging mirror) treat `unavailable`/`unknown` source
-  states as *not* a match instead of bouncing between on/off, so the
-  dashboard no longer shows a flickering "connected" during a source gap.
-- `ev_charging_active`'s mirror now stays "on" whenever the implied
-  charging source is on, even if the explicitly configured source flips;
-  the mirror ordering also changed so `charging_active` registers before
-  `price_cheap`, matching the documented entity order.
+- Mirror sensors treat *decorated* unavailable states as unavailable.
+  Some charger integrations emit variants like `unknown 0` alongside the
+  plain `unknown`; the old exact-match check let `unknown 0` through as a
+  real value, which failed the on-states match and read as a fake unplug.
+  Any state whose first word is `unknown`/`unavailable` is now treated as
+  unavailable, in both `binary_sensor.py` and `sensor.py`.
+- `binary_sensor.ev_vehicle_connected` now stays "on" whenever
+  `binary_sensor.ev_charging_active` is on (`implied_on_by`), because a
+  vehicle drawing current is necessarily plugged in. This makes the
+  previously silent misconfiguration — leaving `charging` out of the
+  connected states list — harmless instead of inverting the connected
+  mirror for the whole session. Entity registration order changed so
+  `ev_charging_active` is added before `ev_vehicle_connected`, which is
+  what lets the connected mirror read it at setup.
 - The Blueprint + legacy-sync copy of the blueprint are no longer both
   written on every helper state; the legacy root path is removed when it
-  matches the bundled file. F13's corrupted README text ("Vehicle Weekend
+  matches the bundled file. The corrupted README text ("Vehicle Weekend
   charging active") is fixed.
+- The `connected` branch's dry-run fallback had a step dedented out from
+  under `then:`, producing `then: null` and leaving the
+  `script.ev_debug_log` call as an unconditional sibling. Home Assistant
+  coerces a null `then` to `[]` rather than erroring, so the blueprint
+  still loaded — but in dry-run mode the `has_value('script.ev_debug_log')`
+  guard was skipped, calling the script even when the package providing it
+  isn't installed. Re-indented, and `tests/test_blueprint.py` now walks the
+  parsed tree asserting no `then`/`else`/`sequence`/`default` key is ever
+  null or empty, since the orphaned step still parses and is invisible in
+  review.
+- `sensor.ev_charging_cost_accumulated` declared `unit_prefix: none`,
+  which YAML parses as the **string** `"none"` — not null — and the
+  `integration` platform's `vol.In(UNIT_PREFIXES)` rejects it. The sensor
+  was therefore never created, leaving all three `sensor.ev_charging_cost_*`
+  meters permanently unavailable. The key is now omitted (its default is
+  already "no prefix").
+- The "smart charging disabled" repair issue awaited
+  `issue_registry.async_create_issue` / `async_delete_issue`. Despite the
+  `async_` prefix both are `@callback` **synchronous** functions returning
+  `None`, so awaiting them raised `TypeError` and aborted
+  `async_setup_entry` on any install where `input_boolean.ev_follow_price`
+  exists. Now called synchronously; the `tests/conftest.py` stubs were
+  declared as coroutines and hid this, and are now sync to match the real
+  contract.
 
 ### Documentation
 
@@ -92,8 +125,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   for `should_stop_charging` variable fragments, `from`/`to` trigger
   punctuation, and the disconnect debounce. `binary_sensor` tests cover
   `implied_on_by` and unavailable/unknown handling; config-flow tests
-  cover the auto-union of recorder "binary sensors combined" options.
-  88 tests (was 59).
+  cover the auto-union of charging states into the connected states.
+  Plus a structural guard against null/empty action bodies anywhere in
+  the blueprint. 89 tests (was 59).
 
 ## [1.6.6] - 2026-08-12
 
@@ -237,12 +271,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- README: worked example for the Easee Oprit (official Easee integration),
-  showing the `sensor.oprit_status` status states to mark for "Vehicle
+- README: worked example for Easee chargers (official Easee integration),
+  showing the `sensor.<charger>_status` states to mark for "Vehicle
   connected" / "Charging active" (lower-case underscore values like
-  `ready_to_charge`, `awaiting_start`, `charging`) and the Oprit's own
-  `sensor.oprit_power` / `sensor.oprit_lifetime_energy` for the optional
-  power/energy fields.
+  `ready_to_charge`, `awaiting_start`, `charging`) and the charger's own
+  `sensor.<charger>_power` / `sensor.<charger>_lifetime_energy` for the
+  optional power/energy fields.
 
 ## [1.6.3] - 2026-08-11
 
@@ -269,7 +303,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   "Template rendered invalid service" when the blueprint's "Notify Devices"
   field used device IDs. The script's service-name template used Jinja's
   literal `replace` (not a regex) to strip the `notify.` prefix, producing
-  malformed services like `notify.mobile_app_notify.iphone_cansu`. It now
+  malformed services like `notify.mobile_app_notify.<device>`. It now
   uses `regex_replace`, so each target resolves to its real
   `notify.mobile_app_*` service and notifications (including the "extra
   keys not allowed @ data['data']" era) are delivered correctly.

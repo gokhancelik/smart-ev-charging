@@ -137,10 +137,11 @@ variables:
 
 triggers:
   # 1. Cable plugged in (debounced: most chargers ramp through several
-  #    transient statuses in the first few seconds after plug-in; the
-  #    Easee here goes awaiting_authorization -> awaiting_start ->
-  #    charging in ~4s. Waiting avoids acting on each intermediate state,
-  #    and also absorbs the "unknown 0" blips some integrations emit).
+  #    transient statuses in the first few seconds after plug-in — an
+  #    Easee, for example, goes awaiting_authorization -> awaiting_start
+  #    -> charging in roughly 4s. Waiting avoids acting on each
+  #    intermediate state, and also absorbs the "unknown 0" blips some
+  #    integrations emit).
   - id: connected
     trigger: state
     entity_id: binary_sensor.ev_vehicle_connected
@@ -262,9 +263,9 @@ actions:
                       - condition: template
                         value_template: "{{ has_value('script.ev_debug_log') }}"
                     then:
-                  - action: script.ev_debug_log
-                    data:
-                      message: "DRY RUN: start charging action skipped"
+                      - action: script.ev_debug_log
+                        data:
+                          message: "DRY RUN: start charging action skipped"
           - if:
               # Safety net for chargers that auto-start faster than the
               # connected trigger can react: if charging is somehow already

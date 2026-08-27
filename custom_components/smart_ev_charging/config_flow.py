@@ -256,10 +256,12 @@ def _union_connected_states(captured: dict) -> dict:
     When both ``vehicle_connected`` and ``charging_active`` point at the
     same status sensor, every state that means "charging" must also mean
     "plugged in" — a vehicle drawing current is necessarily connected.
-    Missing ``charging`` (or ``ready_to_charge``, ``completed``) from the
-    connected list is exactly the F1 failure this prevents; unioning on
-    save makes the mismatch impossible to store. Idempotent; returns the
-    dict it was passed.
+    Leaving ``charging`` out of the connected list is the classic
+    misconfiguration: the connected mirror then flips *off* the instant
+    charging starts, which reads as "unplugged" on the dashboard and kills
+    the blueprint's plug triggers mid-session. Unioning on save makes that
+    mismatch impossible to store. Idempotent; returns the dict it was
+    passed.
     """
     if (
         captured.get(CONF_CHARGING_ACTIVE)

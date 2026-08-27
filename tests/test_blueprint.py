@@ -89,3 +89,36 @@ def test_plug_triggers_are_debounced():
     triggers = {t["id"]: t for t in bp["triggers"]}
     assert triggers["connected"]["for"] == "00:00:10"
     assert triggers["disconnected"]["for"] == "00:00:10"
+
+
+def _walk_for_empty_action_bodies(node, path, problems):
+    """Collect every then/else/sequence/default key with a null or empty body."""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            here = f"{path}.{key}"
+            if key in ("then", "else", "sequence", "default"):
+                if value is None:
+                    problems.append(f"null `{key}:` at {here}")
+                elif isinstance(value, list) and not value:
+                    problems.append(f"empty `{key}: []` at {here}")
+            _walk_for_empty_action_bodies(value, here, problems)
+    elif isinstance(node, list):
+        for index, item in enumerate(node):
+            _walk_for_empty_action_bodies(item, f"{path}[{index}]", problems)
+
+
+def test_no_null_or_empty_action_bodies():
+    """A dedented step under `then:` silently produces `then: null`.
+
+    Home Assistant rejects that at automation-creation time, and it is easy
+    to introduce (and invisible in review) because the orphaned step still
+    parses as a sibling list item. This has now bitten twice, so assert the
+    whole tree structurally rather than eyeballing indentation.
+
+    `choose: []` is the deliberate empty-choose splice trick for action
+    selectors, so `choose` is not in the checked key set — but the
+    `default:` that carries the spliced action list must never be empty.
+    """
+    problems: list[str] = []
+    _walk_for_empty_action_bodies(_load_blueprint(), "<root>", problems)
+    assert not problems, "empty action bodies in blueprint:\n  " + "\n  ".join(problems)

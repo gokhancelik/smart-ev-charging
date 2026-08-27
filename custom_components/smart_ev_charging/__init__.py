@@ -100,7 +100,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _build_follow_price_change_handler(hass),
         )
     )
-    await _async_update_smart_charging_disabled_issue(hass)
+    _update_smart_charging_disabled_issue(hass)
 
     return True
 
@@ -196,14 +196,21 @@ def _remove_legacy_blueprint(hass: HomeAssistant) -> bool:
     return True
 
 
-async def _async_update_smart_charging_disabled_issue(hass: HomeAssistant) -> None:
+@callback
+def _update_smart_charging_disabled_issue(hass: HomeAssistant) -> None:
     """Raise or clear the "smart charging is installed but disabled" issue.
 
     The feature this integration exists to provide is a no-op while
     ``input_boolean.ev_follow_price`` is off and the charger auto-starts on
-    plug-in — an easy onboarding trap the report diagnosed on a live
-    install. No-ops (rather than raising) if the package's helper isn't
-    loaded yet; the state-change listener covers that case.
+    plug-in — an easy onboarding trap diagnosed on a live install. No-ops
+    (rather than raising) if the package's helper isn't loaded yet; the
+    state-change listener covers that case.
+
+    Synchronous on purpose: despite the ``async_`` prefix,
+    ``issue_registry.async_create_issue`` / ``async_delete_issue`` are
+    ``@callback`` functions returning ``None``, not coroutines. Awaiting
+    them raises ``TypeError: object NoneType can't be used in 'await'
+    expression`` and takes ``async_setup_entry`` down with it.
     """
     state = hass.states.get(_FOLLOW_PRICE_ENTITY)
     if state is None:
@@ -213,7 +220,7 @@ async def _async_update_smart_charging_disabled_issue(hass: HomeAssistant) -> No
         )
         return
     if state.state == "off":
-        await async_create_issue(
+        async_create_issue(
             hass,
             DOMAIN,
             _ISSUE_SMART_CHARGING_DISABLED,
@@ -223,17 +230,15 @@ async def _async_update_smart_charging_disabled_issue(hass: HomeAssistant) -> No
             translation_key=_ISSUE_SMART_CHARGING_DISABLED,
         )
     else:
-        await async_delete_issue(hass, DOMAIN, _ISSUE_SMART_CHARGING_DISABLED)
+        async_delete_issue(hass, DOMAIN, _ISSUE_SMART_CHARGING_DISABLED)
 
 
-def _build_follow_price_change_handler(
-    hass: HomeAssistant,
-) -> "callback":
+def _build_follow_price_change_handler(hass: HomeAssistant):
     """Return the toggle-watcher that re-syncs the disabled-toggle repair issue."""
 
     @callback
     def _handler(event: Event[EventStateChangedData]) -> None:
-        hass.async_create_task(_async_update_smart_charging_disabled_issue(hass))
+        _update_smart_charging_disabled_issue(hass)
 
     return _handler
 

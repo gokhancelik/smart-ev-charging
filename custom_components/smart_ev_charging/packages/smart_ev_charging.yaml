@@ -292,7 +292,10 @@ sensor:
     name: "EV Charging Cost Accumulated"
     unique_id: ev_charging_cost_accumulated
     source: sensor.ev_charging_power_cost
-    unit_prefix: none
+    # No unit_prefix: the default is already "no prefix". Do NOT write
+    # `unit_prefix: none` — YAML parses that as the *string* "none", which
+    # the integration platform's vol.In(UNIT_PREFIXES) rejects, so the
+    # sensor is silently never created and the cost meters lose their source.
     unit_time: h
     method: trapezoidal
     round: 2

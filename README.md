@@ -172,17 +172,21 @@ report, so you don't need to type (or mistype) them by hand. Leave it empty
 if your source is a real binary_sensor — the integration then falls back to
 plain on/off, unchanged from before.
 
-**Example — Easee Oprit (via the official Easee integration).** The Oprit
-exposes a single text status sensor rather than separate connected/charging
-binary sensors, so point both "Vehicle connected" and "Charging active" at
-it and use its own energy/power sensors for the optional fields:
+**Worked example — Easee (via the official Easee integration).** An Easee
+charger exposes a single text status sensor rather than separate
+connected/charging binary sensors, so point both "Vehicle connected" and
+"Charging active" at it and use its own energy/power sensors for the
+optional fields. The Easee integration names entities after whatever you
+called the charger in the Easee app, so substitute your own charger's name
+for `<charger>` below (e.g. a charger named "Driveway" gives
+`sensor.driveway_status`):
 
 | Integration field | Pick |
 |---|---|
-| Vehicle connected | `sensor.oprit_status` |
-| Charging active | `sensor.oprit_status` |
-| Charging power | `sensor.oprit_power` |
-| Energy meter | `sensor.oprit_lifetime_energy` |
+| Vehicle connected | `sensor.<charger>_status` |
+| Charging active | `sensor.<charger>_status` |
+| Charging power | `sensor.<charger>_power` |
+| Energy meter | `sensor.<charger>_lifetime_energy` |
 
 In the "Status sensor states" screen, tick:
 
@@ -191,11 +195,15 @@ In the "Status sensor states" screen, tick:
   `disconnected`)
 - Charging active — `charging`
 
-Note the Oprit reports its status in lower-case with underscores
+Note that Easee reports its status in lower-case with underscores
 (`ready_to_charge`, `awaiting_start`, …) — not the title-case
-"Ready to Charge" some other Easee/OCPP chargers use. Tick exactly the
+"Ready to Charge" some other OCPP chargers use. Tick exactly the
 values your sensor reports; matching is case-insensitive but otherwise
 exact, so the picker's pre-filled list is your safest reference.
+
+Easee also emits a transient `unknown 0` status during firmware polling.
+Don't tick it — the integration treats any state whose first word is
+`unknown`/`unavailable` as unavailable rather than as a real value.
 
 The integration exposes what you picked under stable entity IDs
 (`binary_sensor.ev_vehicle_connected`, `binary_sensor.ev_charging_active`,

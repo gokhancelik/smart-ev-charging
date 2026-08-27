@@ -25,10 +25,10 @@ def issue_log(monkeypatch):
     """Record create/delete calls instead of the stub no-ops."""
     calls = {"create": [], "delete": []}
 
-    async def _create(hass, domain, issue_id, **kwargs):
+    def _create(hass, domain, issue_id, **kwargs):
         calls["create"].append((domain, issue_id, kwargs))
 
-    async def _delete(hass, domain, issue_id):
+    def _delete(hass, domain, issue_id):
         calls["delete"].append((domain, issue_id))
 
     monkeypatch.setattr(init, "async_create_issue", _create)
@@ -38,19 +38,15 @@ def issue_log(monkeypatch):
 
 def test_issue_noop_when_helper_not_loaded_yet(hass, issue_log):
     """The package helper may load after the integration — must not raise."""
-    import asyncio
-
     assert hass.states.get(FOLLOW_PRICE) is None
-    asyncio.run(init._async_update_smart_charging_disabled_issue(hass))
+    init._update_smart_charging_disabled_issue(hass)
     assert issue_log["create"] == []
     assert issue_log["delete"] == []
 
 
 def test_issue_created_when_follow_price_off(hass, add_state, issue_log):
-    import asyncio
-
     add_state(FOLLOW_PRICE, "off")
-    asyncio.run(init._async_update_smart_charging_disabled_issue(hass))
+    init._update_smart_charging_disabled_issue(hass)
     assert len(issue_log["create"]) == 1
     domain, issue_id, kwargs = issue_log["create"][0]
     assert domain == init.DOMAIN
@@ -60,10 +56,8 @@ def test_issue_created_when_follow_price_off(hass, add_state, issue_log):
 
 
 def test_issue_deleted_when_follow_price_on(hass, add_state, issue_log):
-    import asyncio
-
     add_state(FOLLOW_PRICE, "on")
-    asyncio.run(init._async_update_smart_charging_disabled_issue(hass))
+    init._update_smart_charging_disabled_issue(hass)
     assert issue_log["delete"] == [(init.DOMAIN, init._ISSUE_SMART_CHARGING_DISABLED)]
     assert issue_log["create"] == []
 

@@ -267,8 +267,14 @@ Two deliberate trade-offs, both documented in `dashboard.py`:
 - **The "smart charging disabled" repair issue** (`issue_registry`
   `smart_charging_disabled`) is created whenever
   `input_boolean.ev_follow_price` is `off` and cleaned up automatically
-  when the helper isn't loaded yet (no-op) or turns `on`. It's the
-  v1.7.0 answer to F2 ("we never knew the system was in Manual mode").
+  when the helper isn't loaded yet (no-op) or turns `on`. It exists
+  because nothing previously surfaced "the system is in Manual mode, so
+  it will charge the moment you plug in" — the integration installed
+  cleanly and stayed silent about its main feature being switched off.
+  Note both `issue_registry.async_create_issue` and `async_delete_issue`
+  are `@callback` **synchronous** functions despite the `async_` prefix;
+  awaiting them raises `TypeError` and fails `async_setup_entry`. The
+  `tests/conftest.py` stubs are deliberately sync to hold that contract.
 
 ### Why the integration's mirror entities exist
 

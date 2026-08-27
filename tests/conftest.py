@@ -187,10 +187,15 @@ def _install_ha_stubs() -> None:
     ha_issue = _module("homeassistant.helpers.issue_registry")
     ha_issue.IssueSeverity = enum.Enum("IssueSeverity", "ERROR WARNING CRITICAL")
 
-    async def async_create_issue(*_args, **_kwargs):
+    # Deliberately SYNCHRONOUS, matching real Home Assistant: despite the
+    # async_ prefix, both are @callback functions returning None. Stubbing
+    # them as coroutines lets `await async_create_issue(...)` pass here and
+    # then blow up with TypeError on a real instance — which is exactly what
+    # happened once. Keep these sync so the tests hold the real contract.
+    def async_create_issue(*_args, **_kwargs):
         return None
 
-    async def async_delete_issue(*_args, **_kwargs):
+    def async_delete_issue(*_args, **_kwargs):
         return None
 
     ha_issue.async_create_issue = async_create_issue

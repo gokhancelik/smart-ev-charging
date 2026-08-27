@@ -13,3 +13,7 @@ secrets.yaml
 # Python
 __pycache__/
 *.pyc
+
+# Local diagnostic reports — contain live-instance hostnames, entity IDs
+# and device names. Keep them out of the public repo.
+DIAGNOSTIC-REPORT-*.md
