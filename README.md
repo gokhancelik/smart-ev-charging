@@ -6,7 +6,7 @@ level is reached. Works with *any* EV/charger integration — you point it at
 your existing vehicle/charger/price entities once, through a normal
 Home Assistant config flow; a package and blueprint do the rest.
 
-![version](https://img.shields.io/badge/version-1.8.0-blue)
+![version](https://img.shields.io/badge/version-1.9.0-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ---
@@ -144,6 +144,7 @@ Tibber, …):
 | Battery percentage | optional | `sensor.car_battery_level` |
 | Charging power | optional | `sensor.charger_power` |
 | Energy meter | optional | `sensor.charger_energy_total` |
+| Live session energy | optional | `sensor.charger_session_energy` |
 | Departure calendar | optional | `calendar.work_schedule` |
 
 "Cheap electricity" is normally produced by your energy-price integration
@@ -187,6 +188,7 @@ for `<charger>` below (e.g. a charger named "Driveway" gives
 | Charging active | `sensor.<charger>_status` |
 | Charging power | `sensor.<charger>_power` |
 | Energy meter | `sensor.<charger>_lifetime_energy` |
+| Live session energy | `sensor.<charger>_session_energy` |
 
 In the "Status sensor states" screen, tick:
 
@@ -209,7 +211,9 @@ The integration exposes what you picked under stable entity IDs
 (`binary_sensor.ev_vehicle_connected`, `binary_sensor.ev_charging_active`,
 `binary_sensor.ev_price_cheap`, `sensor.ev_charging_price`,
 `sensor.ev_battery_percentage`, `sensor.ev_charging_power`,
-`sensor.ev_energy_meter`, plus diagnostic `sensor.ev_smart_charging_config`)
+`sensor.ev_energy_meter`, `sensor.ev_session_energy_live` (only exists
+when the optional live session-energy sensor is configured), plus
+diagnostic `sensor.ev_smart_charging_config`)
 — the package, scripts, blueprint, and dashboards all read from these, not
 from your raw integration entities directly.
 
@@ -416,6 +420,20 @@ charge within ~5–30 s when the price isn't cheap. To avoid the burst
 entirely, disable the charger's own auto-start (for Easee: enable its own
 scheduler/smart-charging and let Smart EV Charging drive it).
 
+**Why does "energy added" / session cost show 0.00 for the first hour of
+a charging session?**
+Your charger's cumulative energy meter only refreshes occasionally — the
+Easee cloud, for example, updates its lifetime-energy sensor roughly once
+per hour — and session energy is derived from that meter, so it sits at
+0.00 and then jumps in one step. Point the integration's optional **Live
+session energy** field at a sensor that reports the current session's
+energy in near-real-time (Easee: `sensor.<charger>_session_energy`, which
+updates every few minutes and resets at each new session). From v1.9.0 the
+package takes whichever source is further ahead, so "energy added",
+session cost, and the notifications move within minutes of charging
+starting, and the meter still supplies the exact final value at session
+close.
+
 **Why did "today"/"this week" energy & cost tiles reset to zero on upgrade
 to 1.7.0?**
 The utility meters were re-sourced from the live charger energy meter and
@@ -460,7 +478,7 @@ in the blueprints directory.
 | "Smart charging is installed but disabled" repair notice in Settings > System > Repairs | `input_boolean.ev_follow_price` ("EV Smart Charging Enabled") is off, so the system is in Manual mode. Turn it on from the dashboard or run `script.ev_enable_smart_charging` to clear the notice |
 | Today/this-week energy & cost tiles freeze mid-session (stay at last session's numbers) | You're on v1.6.6 or earlier. Upgrade to v1.7.0 — the utility meters now track the live charger meter and a continuous cost integral instead of only updating when a session closes |
 | `Long-term statistics start time is in the future` / unit-mismatch warnings for cost/energy long-term statistics | Statistics were compiled before the sensor had a unit. In Developer Tools > Statistics > Fix the issue, update the unit for `sensor.ev_charging_cost_accumulated` (and any merged duplicates), or delete the old statistics and let them rebuild |
-| Upgrading from v1.6.x doesn't apply the new package YAML (meters/charts unchanged) | The package is copied once into `config/packages/` and never overwritten. After upgrading, manually replace `config/packages/smart_ev_charging.yaml` with the new copy from the release and restart, so v1.7.0's re-sourced meters take effect |
+| Upgrading doesn't apply the new package YAML (meters/charts/session energy unchanged) | The package is copied once into `config/packages/` and never overwritten, so package-side changes need a manual step: replace `config/packages/smart_ev_charging.yaml` with the new copy from the release (`custom_components/smart_ev_charging/packages/smart_ev_charging.yaml` in the repo/HACS install), then restart. This applies to v1.7.0's re-sourced meters and v1.9.0's live session energy |
 
 Turn on `input_boolean.ev_debug_logging` and watch the Logbook, or check
 the "🐞 Debug" dashboard section — it surfaces every raw helper, every

@@ -28,6 +28,7 @@ from .const import (
     CONF_ENERGY,
     CONF_POWER,
     CONF_PRICE,
+    CONF_SESSION_ENERGY,
     CONF_VEHICLE_CONNECTED,
     DOMAIN,
 )
@@ -104,6 +105,19 @@ async def async_setup_entry(
                 name="EV Energy Meter",
                 object_id="ev_energy_meter",
                 icon="mdi:counter",
+                device_class=SensorDeviceClass.ENERGY,
+                state_class=SensorStateClass.TOTAL_INCREASING,
+                mirror_unit=True,
+            )
+        )
+    if config.get(CONF_SESSION_ENERGY):
+        entities.append(
+            SmartEvChargingMirrorSensor(
+                entry,
+                config[CONF_SESSION_ENERGY],
+                name="EV Session Energy Live",
+                object_id="ev_session_energy_live",
+                icon="mdi:lightning-bolt",
                 device_class=SensorDeviceClass.ENERGY,
                 state_class=SensorStateClass.TOTAL_INCREASING,
                 mirror_unit=True,
@@ -199,5 +213,6 @@ class SmartEvChargingConfigSensor(SensorEntity):
             "battery_entity": self._config.get(CONF_BATTERY),
             "power_entity": self._config.get(CONF_POWER),
             "energy_entity": self._config.get(CONF_ENERGY),
+            "session_energy_entity": self._config.get(CONF_SESSION_ENERGY),
             "departure_calendar_entity": self._config.get(CONF_DEPARTURE_CALENDAR),
         }

@@ -5,6 +5,32 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.9.0] - 2026-10-16
+
+### Added
+
+- A new optional **"Live session energy"** entity in the integration's
+  config flow (Easee: `sensor.<charger>_session_energy`). On chargers whose
+  cumulative energy meter refreshes slowly — the Easee cloud updates its
+  `lifetime_energy` sensor roughly hourly — `sensor.ev_charging_session_energy`,
+  the session-cost sensors, and the "energy added" notification previously
+  read 0.00 for up to an hour after every session started. With the new
+  field set, session energy is the **greater of** the live sensor's value
+  and the meter-delta fallback: it moves within minutes of charging
+  starting, while the meter still supplies the exact final value at
+  session close (covering the live sensor's own update lag there). The
+  source is mirrored as `sensor.ev_session_energy_live` and shown as
+  `session_energy_entity` on `sensor.ev_smart_charging_config`; leaving
+  the field empty keeps the previous meter-delta behavior unchanged.
+
+### Upgrade notes
+
+- Package-side change: `config/packages/smart_ev_charging.yaml` is copied
+  once and never overwritten, so apply it manually (replace the file,
+  restart) — same drill as the v1.7.0 meter re-source, see README >
+  Troubleshooting. The new config-flow field itself only appears after
+  updating the integration to 1.9.0 via HACS.
+
 ## [1.8.0] - 2026-10-16
 
 ### Changed

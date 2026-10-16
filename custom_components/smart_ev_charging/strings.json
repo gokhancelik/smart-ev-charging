@@ -12,6 +12,7 @@
           "battery": "Battery percentage (optional, sensor)",
           "power": "Charging power (optional, sensor)",
           "energy": "Energy meter (optional, sensor)",
+          "session_energy": "Live session energy (optional, sensor)",
           "departure_calendar": "Departure calendar (optional, calendar)"
         },
         "data_description": {
@@ -22,6 +23,7 @@
           "battery": "The vehicle's state of charge in percent. Enables the stop-at-target-battery-% and low-battery-emergency features, and battery readouts in notifications and dashboards.",
           "power": "Current charging power (e.g. kW). Shown in notifications and dashboards; not required for any charging decision.",
           "energy": "Cumulative energy delivered by the charger, in kWh. Used to calculate energy delivered and cost for the current session.",
+          "session_energy": "Energy delivered during the current session as your charger reports it live (e.g. Easee's session_energy sensor). When set, 'energy added' and the cost sensors update within minutes instead of waiting for the cumulative meter's next refresh — which is hourly on Easee. It must reset to 0 when a new session starts. Leave empty to derive session energy from the energy meter.",
           "departure_calendar": "A calendar whose next event start time is treated as your departure deadline — charging is forced on if the cheap price hasn't arrived in time. Leave empty to use a fixed daily departure time instead (set via the input_datetime.ev_departure_time helper)."
         }
       },
@@ -69,6 +71,7 @@
           "battery": "Battery percentage (optional, sensor)",
           "power": "Charging power (optional, sensor)",
           "energy": "Energy meter (optional, sensor)",
+          "session_energy": "Live session energy (optional, sensor)",
           "departure_calendar": "Departure calendar (optional, calendar)"
         },
         "data_description": {
@@ -79,6 +82,7 @@
           "battery": "The vehicle's state of charge in percent. Enables the stop-at-target-battery-% and low-battery-emergency features, and battery readouts in notifications and dashboards.",
           "power": "Current charging power (e.g. kW). Shown in notifications and dashboards; not required for any charging decision.",
           "energy": "Cumulative energy delivered by the charger, in kWh. Used to calculate energy delivered and cost for the current session.",
+          "session_energy": "Energy delivered during the current session as your charger reports it live (e.g. Easee's session_energy sensor). When set, 'energy added' and the cost sensors update within minutes instead of waiting for the cumulative meter's next refresh — which is hourly on Easee. It must reset to 0 when a new session starts. Leave empty to derive session energy from the energy meter.",
           "departure_calendar": "A calendar whose next event start time is treated as your departure deadline. Leave empty to use a fixed daily departure time instead (set via the input_datetime.ev_departure_time helper)."
         }
       },

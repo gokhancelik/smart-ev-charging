@@ -46,6 +46,7 @@ from .const import (
     CONF_ENERGY,
     CONF_POWER,
     CONF_PRICE,
+    CONF_SESSION_ENERGY,
     CONF_VEHICLE_CONNECTED,
     CONF_VEHICLE_CONNECTED_STATES,
     DASHBOARD_TITLE,
@@ -87,6 +88,7 @@ def _build_entity_schema(current: dict) -> vol.Schema:
     optional_entity(CONF_BATTERY, "sensor")
     optional_entity(CONF_POWER, "sensor")
     optional_entity(CONF_ENERGY, "sensor")
+    optional_entity(CONF_SESSION_ENERGY, "sensor")
     optional_entity(CONF_DEPARTURE_CALENDAR, "calendar")
 
     return vol.Schema(fields)

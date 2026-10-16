@@ -370,7 +370,18 @@ template:
           {% endif %}
 
       # ---------------------------------------------------------------
-      # Energy delivered this session (requires optional energy meter)
+      # Energy delivered this session. Two possible sources, whichever
+      # is further along wins:
+      #  - sensor.ev_session_energy_live: the optional "Live session
+      #    energy" sensor picked in the integration's config — resets to
+      #    0 when a new session starts, updates every few minutes.
+      #  - the energy meter delta (meter − start reading): exact once the
+      #    meter refreshes, but "refresh" is hourly on some chargers
+      #    (Easee's cloud lifetime energy), so it reads 0.00 for up to an
+      #    hour at the start of every session.
+      # max() lets the fast source fill the slow source's gaps and vice
+      # versa (e.g. the live sensor's own update lag right at session
+      # close, when the meter delta is already final).
       # ---------------------------------------------------------------
       - name: "EV Charging Session Energy"
         unique_id: ev_charging_session_energy
@@ -379,12 +390,17 @@ template:
         device_class: energy
         state_class: total_increasing
         state: >-
-          {% if is_state('sensor.ev_energy_meter', 'unavailable') or is_state('sensor.ev_energy_meter', 'unknown') %}
+          {% set unavailable_states = ['unknown', 'unavailable', 'none'] %}
+          {% set meter = states('sensor.ev_energy_meter') %}
+          {% set live = states('sensor.ev_session_energy_live') %}
+          {% if meter in unavailable_states and live in unavailable_states %}
             {{ none }}
           {% else %}
-            {{ [0, (states('sensor.ev_energy_meter') | float(0)) - (states('input_number.ev_charge_start_energy') | float(0))] | max | round(2) }}
+            {% set from_meter = (meter | float(0)) - (states('input_number.ev_charge_start_energy') | float(0)) if meter not in unavailable_states else 0 %}
+            {% set from_live = live | float(0) if live not in unavailable_states else 0 %}
+            {{ [0, from_meter, from_live] | max | round(2) }}
           {% endif %}
-        availability: "{{ states('sensor.ev_energy_meter') not in ['unknown', 'unavailable'] }}"
+        availability: "{{ states('sensor.ev_energy_meter') not in ['unknown', 'unavailable'] or states('sensor.ev_session_energy_live') not in ['unknown', 'unavailable'] }}"
 
       # ---------------------------------------------------------------
       # Cost accrued this session (approximation: energy x avg of
@@ -515,7 +531,7 @@ template:
       - name: "EV Smart Charging Version"
         unique_id: ev_smart_charging_version
         icon: mdi:tag-outline
-        state: "1.8.0"
+        state: "1.9.0"
 
   - binary_sensor:
       # ---------------------------------------------------------------

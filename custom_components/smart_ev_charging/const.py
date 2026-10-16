@@ -22,6 +22,7 @@ CONF_CHEAP_PRICE = "cheap_price"
 CONF_BATTERY = "battery"
 CONF_POWER = "power"
 CONF_ENERGY = "energy"
+CONF_SESSION_ENERGY = "session_energy"
 CONF_DEPARTURE_CALENDAR = "departure_calendar"
 
 # Required entity-pointer fields (must resolve to a real entity)
@@ -37,5 +38,6 @@ OPTIONAL_FIELDS = (
     CONF_BATTERY,
     CONF_POWER,
     CONF_ENERGY,
+    CONF_SESSION_ENERGY,
     CONF_DEPARTURE_CALENDAR,
 )

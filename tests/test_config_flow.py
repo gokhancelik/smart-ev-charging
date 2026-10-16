@@ -312,6 +312,7 @@ def test_options_flow_configure_shows_form(hass):
         "battery",
         "power",
         "energy",
+        "session_energy",
         "departure_calendar",
     }
 
@@ -339,6 +340,7 @@ def test_options_step_translations_match_schema(hass):
         CONF_ENERGY,
         CONF_POWER,
         CONF_PRICE,
+        CONF_SESSION_ENERGY,
         CONF_VEHICLE_CONNECTED,
     )
     from homeassistant.config_entries import ConfigEntry
@@ -366,6 +368,7 @@ def test_options_step_translations_match_schema(hass):
         CONF_BATTERY,
         CONF_POWER,
         CONF_ENERGY,
+        CONF_SESSION_ENERGY,
         CONF_DEPARTURE_CALENDAR,
     }
     for step_id, schema_fields in (("configure", expected_configure),):

@@ -13,6 +13,7 @@ from custom_components.smart_ev_charging.const import (
     CONF_CHARGING_ACTIVE,
     CONF_CHEAP_PRICE,
     CONF_PRICE,
+    CONF_SESSION_ENERGY,
     CONF_VEHICLE_CONNECTED,
 )
 from custom_components.smart_ev_charging.sensor import async_setup_entry
@@ -68,3 +69,17 @@ def test_options_value_wins_over_data(hass):
     entry = ConfigEntry(data=data, options=options)
     ids = _mirror_ids(hass, entry)
     assert "sensor.ev_battery_percentage" in ids
+
+
+def test_session_energy_mirror_created_when_configured(hass):
+    data = _full_config("sensor.data_battery")
+    data[CONF_SESSION_ENERGY] = "sensor.charger_session_energy"
+    entry = ConfigEntry(data=data, options={})
+    ids = _mirror_ids(hass, entry)
+    assert "sensor.ev_session_energy_live" in ids
+
+
+def test_session_energy_mirror_skipped_when_not_configured(hass):
+    entry = ConfigEntry(data=_full_config("sensor.data_battery"), options={})
+    ids = _mirror_ids(hass, entry)
+    assert "sensor.ev_session_energy_live" not in ids
