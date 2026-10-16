@@ -47,28 +47,60 @@ def test_all_action_calls_are_dry_run_guarded():
     # emergency, cheap-wait backstop, departure deadline, manual_charge_now)
     # + 6 stop sites (price_expensive, battery reached target,
     # manual_stop_requested, connected-branch should_stop pause,
-    # charging_started pause, periodic_check pause).
+    # charging_started pause, reconcile pause).
     assert action_defaults == 12
     assert guards == action_defaults, (
         "every start/stop action call must be guarded by a dry-run branch"
     )
 
 
+_START_FRAGMENTS = (
+    "is_state('binary_sensor.ev_vehicle_connected', 'on')",
+    "is_state('input_boolean.ev_follow_price', 'on')",
+    "is_state('input_boolean.ev_charge_now_override', 'off')",
+    "is_state('binary_sensor.ev_charging_active', 'off')",
+    "is_state('input_boolean.ev_max_price_enabled', 'off')",
+    "(states('sensor.ev_charging_price') | float(0)) <= (states('input_number.ev_max_acceptable_price') | float(1000))",
+    "is_state('input_boolean.ev_target_battery_enabled', 'off')",
+    "states('sensor.ev_battery_percentage') in ['unknown', 'unavailable']",
+    "(states('sensor.ev_battery_percentage') | float(0)) < (states('input_number.ev_target_battery_percentage') | float(100))",
+)
+
+_STOP_FRAGMENTS = (
+    # The auto-stop decision: connected + smart on + no override + charging
+    # active + price explicitly not cheap.
+    "is_state('binary_sensor.ev_vehicle_connected', 'on')",
+    "is_state('input_boolean.ev_follow_price', 'on')",
+    "is_state('input_boolean.ev_charge_now_override', 'off')",
+    "is_state('binary_sensor.ev_charging_active', 'on')",
+    "is_state('binary_sensor.ev_price_cheap', 'off')",
+    "not is_state('binary_sensor.ev_price_cheap', 'unavailable')",
+    "not is_state('binary_sensor.ev_price_cheap', 'unknown')",
+)
+
+_EMERGENCY_DEADLINE_FRAGMENTS = (
+    "is_state('input_boolean.ev_low_battery_emergency_enabled', 'on')",
+    "states('sensor.ev_battery_percentage') not in ['unknown', 'unavailable']",
+    "(states('sensor.ev_battery_percentage') | float(100)) <= (states('input_number.ev_low_battery_threshold') | float(0))",
+    "state_attr('sensor.ev_smart_charging_config', 'departure_calendar_entity')",
+    "as_local(strptime(state_attr(cal, 'start_time'), '%Y-%m-%d %H:%M:%S'))",
+    "today_at(states('input_datetime.ev_departure_time'))",
+    "reconcile_lead_minutes | float(120)",
+)
+
+
 def test_should_stop_charging_variable_defined():
     bp = _load_blueprint()
     stop_expr = bp["variables"]["should_stop_charging"]
-    # The auto-stop decision: connected + smart on + no override + charging
-    # active + price explicitly not cheap.
-    for fragment in (
-        "is_state('binary_sensor.ev_vehicle_connected', 'on')",
-        "is_state('input_boolean.ev_follow_price', 'on')",
-        "is_state('input_boolean.ev_charge_now_override', 'off')",
-        "is_state('binary_sensor.ev_charging_active', 'on')",
-        "is_state('binary_sensor.ev_price_cheap', 'off')",
-        "not is_state('binary_sensor.ev_price_cheap', 'unavailable')",
-        "not is_state('binary_sensor.ev_price_cheap', 'unknown')",
-    ):
+    for fragment in _STOP_FRAGMENTS:
         assert fragment in stop_expr, f"should_stop_charging missing: {fragment}"
+
+
+def test_should_start_charging_variable_defined():
+    bp = _load_blueprint()
+    start_expr = bp["variables"]["should_start_charging"]
+    for fragment in _START_FRAGMENTS:
+        assert fragment in start_expr, f"should_start_charging missing: {fragment}"
 
 
 def test_price_triggers_use_from_and_to():
@@ -89,6 +121,64 @@ def test_plug_triggers_are_debounced():
     triggers = {t["id"]: t for t in bp["triggers"]}
     assert triggers["connected"]["for"] == "00:00:10"
     assert triggers["disconnected"]["for"] == "00:00:10"
+
+
+def test_reconcile_trigger_is_event_driven():
+    """The decision path must not poll: the old `periodic_check` time_pattern
+    is replaced by a template trigger on the predicate union, with a 30 s
+    `for:` that de-duplicates the immediate event triggers."""
+    bp = _load_blueprint()
+    triggers = {t["id"]: t for t in bp["triggers"]}
+    assert "periodic_check" not in triggers
+    reconcile = triggers["reconcile"]
+    assert reconcile["trigger"] == "template"
+    assert reconcile["for"] == "00:00:30"
+    # The only remaining time_pattern is the cosmetic charging-notification
+    # refresh — never part of start/stop decision making.
+    assert [t["id"] for t in bp["triggers"] if t["trigger"] == "time_pattern"] == [
+        "notification_refresh"
+    ]
+
+
+def _iter_trigger_conditions(node):
+    """Yield every {condition: trigger, id: ...} mapping in an action tree."""
+    if isinstance(node, dict):
+        if node.get("condition") == "trigger" and "id" in node:
+            yield node
+        for value in node.values():
+            yield from _iter_trigger_conditions(value)
+    elif isinstance(node, list):
+        for item in node:
+            yield from _iter_trigger_conditions(item)
+
+
+def test_reconcile_branch_also_runs_on_ha_restart():
+    """A template trigger does not fire for already-true state at startup,
+    so the reconcile branch must also accept the `ha_restart` trigger."""
+    bp = _load_blueprint()
+    ids = [condition["id"] for condition in _iter_trigger_conditions(bp["actions"])]
+    assert ids.count(["reconcile", "ha_restart"]) == 1
+    assert "periodic_check" not in _BLUEPRINT.read_text(encoding="utf-8")
+
+
+def test_reconcile_input_wired_via_trigger_variables():
+    """Trigger templates cannot see action-level `variables`; the lead-time
+    blueprint input must be exposed as a trigger variable instead."""
+    bp = _load_blueprint()
+    assert bp["trigger_variables"]["reconcile_lead_minutes"] == (
+        "deadline_lead_time_minutes"
+    )
+
+
+def test_reconcile_template_fragments_match_decision_variables():
+    """Triggers cannot reference action-level variables, so the reconcile
+    template inlines the start/stop predicates. Guard against the inlined
+    copy diverging from the single-source `variables`."""
+    bp = _load_blueprint()
+    triggers = {t["id"]: t for t in bp["triggers"]}
+    template = triggers["reconcile"]["value_template"]
+    for fragment in _START_FRAGMENTS + _STOP_FRAGMENTS + _EMERGENCY_DEADLINE_FRAGMENTS:
+        assert fragment in template, f"reconcile template missing: {fragment}"
 
 
 def _walk_for_empty_action_bodies(node, path, problems):

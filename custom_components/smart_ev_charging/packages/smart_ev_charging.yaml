@@ -515,7 +515,7 @@ template:
       - name: "EV Smart Charging Version"
         unique_id: ev_smart_charging_version
         icon: mdi:tag-outline
-        state: "1.7.0"
+        state: "1.8.0"
 
   - binary_sensor:
       # ---------------------------------------------------------------

@@ -83,6 +83,81 @@ manually trace call sites across files (see "Entity naming and cross-file
 coupling" below) — that coupling is the main source of bugs in this repo,
 not syntax.
 
+## Verifying changes without releasing
+
+HACS installs from tags, not commits — a pushed commit is invisible to
+users. Use that window: behavior changes get verified on the working tree
+**before** the release tag (`AGENTS.md` step 5). Four tiers, cheapest
+first.
+
+### Tier 0 — offline checks (no HA needed, always run)
+
+- `python -m pytest tests -q`. For decision-logic changes this includes
+  the Jinja2 truth-table in `tests/test_reconcile_template.py`, which
+  renders the blueprint's `reconcile` trigger template against synthetic
+  entity states. Extend that table whenever you touch a trigger template
+  or the `should_*` variables, and keep templates pure predicates over
+  entity states plus `now()` so they stay renderable offline — needing
+  services or live listeners is a design smell.
+- The YAML/JSON parse, `py_compile`, and cross-reference greps from
+  "Validating changes" above. Grep for the replaced mechanism's name
+  (e.g. `periodic_check`) to catch stale comments; the dated reports
+  (`DIAGNOSTIC-REPORT-*.md`, `HANDOFF-FINAL.md`) are frozen historical
+  records — leave them untouched.
+
+### Tier 1 — local HA dry run (gate before tagging)
+
+1. Copy the working tree's `custom_components/smart_ev_charging/` into
+   `<HA config>/custom_components/` and restart. No version bump or tag
+   is needed: on startup the integration sync-on-diff copies a changed
+   blueprint, and blueprint-based automations pick up the new triggers
+   after reload/restart.
+2. Turn on `input_boolean.ev_debug_logging` (drives `script.ev_debug_log`)
+   and set the blueprint's `dry_run` input to `true` while testing —
+   decisions are logged, the charger is never touched.
+3. Watch **Settings > Automations > the EV automation > Traces**: each
+   run shows which trigger fired, the rendered template, and `for:`
+   timing. Also watch the Logbook (`script.ev_debug_log` entries) and the
+   HA log for template errors.
+4. Drive scenarios from **Developer Tools > States** by forcing mirror
+   entities/helpers directly — mirrors only overwrite when their
+   configured source entity changes, so forced values stick. Scenario
+   ladder for trigger changes (all Dev Tools, no repo files to add):
+   - idle state: no automation run at all;
+   - each "should act" situation: exactly one run, landing in the
+     expected `choose` branch, within seconds — or ~30 s later for the
+     `for:` backstop;
+   - de-duplication: with `dry_run: false` and harmless scratch actions
+     wired to the blueprint's start/stop inputs, trigger the situation
+     and then force the charging mirror to `on` (or `off`) within 30 s →
+     only the immediate run appears, no backstop run;
+   - missed event: same setup without forcing the mirror → exactly one
+     backstop run ~30 s later, and no further repeats (event-only, no
+     retry loop);
+   - restart recovery: with an actionable state already true, restart HA
+     → the `ha_restart` run covers it;
+   - nightly price gap: force `binary_sensor.ev_price_cheap` to
+     `unavailable` → no runs and no template errors while it stays that
+     way.
+
+### Tier 2 — sandbox HA (optional)
+
+If production HA shouldn't run unreleased files, use a second instance or
+a container with a copy of the config. Same recipes as Tier 1.
+
+### Tier 3 — canary session and rollback
+
+Run one real session with `dry_run` off and compare the trace timeline
+against the ladder above. Rollback is one file: restore the previous
+tagged blueprint with
+`git show v<prev>:custom_components/smart_ev_charging/blueprint/smart_ev_charging.yaml`
+into the HA blueprints directory and restart; the integration re-syncs on
+diff.
+
+Only after the gate passes: bump/tag/release per `AGENTS.md`. Committing
+before Tier 1 is fine (users can't see it) — tagging before it is the
+mistake this section exists to prevent.
+
 ## Architecture
 
 Five pieces cooperate and none is self-sufficient:
@@ -253,8 +328,8 @@ Two deliberate trade-offs, both documented in `dashboard.py`:
   cannot beat the charger to the first watt — `should_stop_charging` (a
   variable whose fragments cover price-uncheap, battery-target reached,
   and manual override) runs in the `connected`, `charging_started` (before
-  the notify/session-seeding steps), `periodic_check` (new pause
-  sub-branch), `price_cheap`/`price_expensive`, and `manual_stop_requested`
+  the notify/session-seeding steps), `reconcile` (pause sub-branch),
+  `price_cheap`/`price_expensive`, and `manual_stop_requested`
   branches and calls `!input stop_charging_action` (dry-run guarded) to
   pause the ~5–30 s burst. Don't rename it to "should_not_start" — the
   stop decision is what makes manual/emergency paths unconditional while

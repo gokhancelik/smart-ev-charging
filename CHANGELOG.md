@@ -5,6 +5,35 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.0] - 2026-10-16
+
+### Changed
+
+- The blueprint automation is now fully event-driven. The 10-minute
+  `periodic_check` poll (`time_pattern: /10`) is replaced by a `reconcile`
+  template trigger that watches the *outcome* of the start/stop decision
+  logic — cheap-window activation, the max-price ceiling, the
+  target-battery gate, the manual "charge now" override, the
+  target-date/deadline datetime, and the pause backstop. Waiting,
+  emergency, and deadline actions now land within seconds of the
+  condition becoming true instead of up to 10 minutes later.
+- A one-shot ~30 s backstop replaces the poll's retry duty: when a
+  decision condition stays true for 30 seconds (e.g. the charger ignored
+  the command, or a state event was missed), the automation acts once.
+  The same branch also runs on Home Assistant restart, so a missed event
+  while HA was down is covered at startup.
+- The trigger template and the blueprint's decision variables share the
+  same pair of Jinja fragments (`should_start_charging` /
+  `should_stop_charging`), guarded by tests so they can't drift apart.
+
+### Fixed
+
+- Calendar-based departure (`departure_calendar_entity`) crashed the
+  deadline comparison with a `TypeError: can't subtract offset-naive and
+  offset-aware datetimes` — `strptime()` returns a naive datetime while
+  `now()` is timezone-aware. Both the trigger template and the branch now
+  wrap `strptime()` results in `as_local()`.
+
 ## [1.7.0] - 2026-08-27
 
 ### Breaking changes

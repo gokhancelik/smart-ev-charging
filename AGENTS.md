@@ -29,7 +29,11 @@ docs update or the release tag:
    - `README.md`'s version badge.
 3. Validate before committing (see `CLAUDE.md` > "Validating changes"):
    YAML/JSON parse, Python `py_compile`, cross-file entity-reference grep
-   if anything was renamed/removed.
+   if anything was renamed/removed. Behavior changes to the blueprint,
+   package, or integration must additionally pass the pre-release
+   verification gate in `CLAUDE.md` > "Verifying changes without
+   releasing" (offline tests + local HA dry run) **before** step 5's tag —
+   a pushed commit is fine, an untested tag is not.
 4. Commit and push.
 5. **Tag and release**: `git tag -a vX.Y.Z -m "..."`,
    `git push origin vX.Y.Z`, then

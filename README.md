@@ -6,7 +6,7 @@ level is reached. Works with *any* EV/charger integration — you point it at
 your existing vehicle/charger/price entities once, through a normal
 Home Assistant config flow; a package and blueprint do the rest.
 
-![version](https://img.shields.io/badge/version-1.7.0-blue)
+![version](https://img.shields.io/badge/version-1.8.0-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ---
@@ -388,7 +388,12 @@ to a specific device.
 **What happens if Home Assistant restarts mid-charge?**
 All helpers restore their last state automatically. If charging was
 already active before the restart, the blueprint backfills session
-tracking on startup so duration/energy/cost stay accurate.
+tracking on startup so duration/energy/cost stay accurate. From v1.8.0
+the automation is fully event-driven — it re-checks the decision logic on
+startup and reacts to state changes as they happen. The old 10-minute
+polling check is gone, so waiting, emergency, and deadline actions land
+within seconds instead of up to 10 minutes later; a missed event is
+caught by a one-shot ~30 s backstop.
 
 **Does the "Charge now" button disable smart charging permanently?**
 No — it only overrides the current session. It resets automatically when

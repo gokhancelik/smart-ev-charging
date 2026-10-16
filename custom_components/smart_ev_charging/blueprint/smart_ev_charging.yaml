@@ -107,17 +107,21 @@ variables:
   dry_run: !input dry_run
   # The single "should we auto-start right now" decision, shared by the
   # price_cheap trigger, the connected-during-cheap-window check, and the
-  # periodic_check backstop — kept in one place so the three can't diverge.
+  # event-driven reconcile backstop — kept in one place so the three can't
+  # diverge. Entity IDs are spelled out here instead of using the aliases
+  # above, because the reconcile trigger inlines these same predicates
+  # (triggers cannot reference action-level variables) and
+  # tests/test_blueprint.py asserts fragment parity between the two.
   should_start_charging: >-
     {{ is_state('binary_sensor.ev_vehicle_connected', 'on')
        and is_state('input_boolean.ev_follow_price', 'on')
        and is_state('input_boolean.ev_charge_now_override', 'off')
        and is_state('binary_sensor.ev_charging_active', 'off')
        and (is_state('input_boolean.ev_max_price_enabled', 'off')
-            or (states(current_price) | float(0)) <= (states('input_number.ev_max_acceptable_price') | float(1000)))
+            or (states('sensor.ev_charging_price') | float(0)) <= (states('input_number.ev_max_acceptable_price') | float(1000)))
        and (is_state('input_boolean.ev_target_battery_enabled', 'off')
-            or states(battery_percentage) in ['unknown', 'unavailable']
-            or (states(battery_percentage) | float(0)) < (states('input_number.ev_target_battery_percentage') | float(100))) }}
+            or states('sensor.ev_battery_percentage') in ['unknown', 'unavailable']
+            or (states('sensor.ev_battery_percentage') | float(0)) < (states('input_number.ev_target_battery_percentage') | float(100))) }}
   # The single "should we auto-stop right now" decision. Most chargers
   # auto-start on plug-in, so by the time this blueprint learns about it
   # the car is already drawing power. If smart mode is on, nobody pressed
@@ -134,6 +138,13 @@ variables:
        and is_state('binary_sensor.ev_price_cheap', 'off')
        and not is_state('binary_sensor.ev_price_cheap', 'unavailable')
        and not is_state('binary_sensor.ev_price_cheap', 'unknown') }}
+
+# Trigger-scope variables: blueprint inputs referenced inside trigger
+# templates (the `reconcile` value_template below) must go through
+# trigger_variables — limited templates evaluated once when the trigger is
+# attached — because action-level `variables` above are not visible there.
+trigger_variables:
+  reconcile_lead_minutes: !input deadline_lead_time_minutes
 
 triggers:
   # 1. Cable plugged in (debounced: most chargers ramp through several
@@ -195,10 +206,61 @@ triggers:
     entity_id: sensor.ev_battery_percentage
     not_to: ["unknown", "unavailable"]
 
-  # 8. Periodic check for departure deadline / low battery emergency
-  - id: periodic_check
-    trigger: time_pattern
-    minutes: "/10"
+  # 8. Event-driven reconcile (was a 10-minute `time_pattern` poll). Fires
+  #    on the false->true edge of the union of every situation the old
+  #    periodic check handled: the cheap-window backstop start, the
+  #    low-battery emergency, the departure deadline, and the auto-started
+  #    pause backstop. The 30 s `for:` de-duplicates the immediate event
+  #    triggers (price_cheap / price_expensive / charging_started): if the
+  #    state converges within 30 s the template drops back to false and
+  #    this never fires; if an event was missed or an action didn't take
+  #    effect, this is the backstop. HA restart recovery is handled by the
+  #    same branch via `ha_restart`, because a template trigger does not
+  #    fire for already-true state at startup. Predicates are inlined
+  #    because triggers cannot reference action-level variables;
+  #    tests/test_blueprint.py asserts fragment parity with the
+  #    should_start_charging / should_stop_charging variables.
+  - id: reconcile
+    trigger: template
+    for: "00:00:30"
+    value_template: >-
+      {% set cal = state_attr('sensor.ev_smart_charging_config', 'departure_calendar_entity') %}
+      {% if cal and state_attr(cal, 'start_time') %}
+        {% set deadline = ((as_local(strptime(state_attr(cal, 'start_time'), '%Y-%m-%d %H:%M:%S')) - now()).total_seconds() / 60) <= (reconcile_lead_minutes | float(120)) %}
+      {% elif states('input_datetime.ev_departure_time') not in ['unknown', 'unavailable', ''] %}
+        {% set today_dep = today_at(states('input_datetime.ev_departure_time')) %}
+        {% set next_dep = today_dep if today_dep > now() else today_dep + timedelta(days=1) %}
+        {% set deadline = ((next_dep - now()).total_seconds() / 60) <= (reconcile_lead_minutes | float(120)) %}
+      {% else %}
+        {% set deadline = false %}
+      {% endif %}
+      {% set cheap_start = is_state('binary_sensor.ev_vehicle_connected', 'on')
+           and is_state('input_boolean.ev_follow_price', 'on')
+           and is_state('input_boolean.ev_charge_now_override', 'off')
+           and is_state('binary_sensor.ev_charging_active', 'off')
+           and (is_state('input_boolean.ev_max_price_enabled', 'off')
+                or (states('sensor.ev_charging_price') | float(0)) <= (states('input_number.ev_max_acceptable_price') | float(1000)))
+           and (is_state('input_boolean.ev_target_battery_enabled', 'off')
+                or states('sensor.ev_battery_percentage') in ['unknown', 'unavailable']
+                or (states('sensor.ev_battery_percentage') | float(0)) < (states('input_number.ev_target_battery_percentage') | float(100)))
+           and is_state('binary_sensor.ev_price_cheap', 'on') %}
+      {% set emergency = is_state('binary_sensor.ev_vehicle_connected', 'on')
+           and is_state('binary_sensor.ev_charging_active', 'off')
+           and is_state('input_boolean.ev_low_battery_emergency_enabled', 'on')
+           and states('sensor.ev_battery_percentage') not in ['unknown', 'unavailable']
+           and (states('sensor.ev_battery_percentage') | float(100)) <= (states('input_number.ev_low_battery_threshold') | float(0)) %}
+      {% set deadline_start = deadline
+           and is_state('binary_sensor.ev_vehicle_connected', 'on')
+           and is_state('binary_sensor.ev_charging_active', 'off')
+           and is_state('input_boolean.ev_follow_price', 'on') %}
+      {% set pause_backstop = is_state('binary_sensor.ev_vehicle_connected', 'on')
+           and is_state('input_boolean.ev_follow_price', 'on')
+           and is_state('input_boolean.ev_charge_now_override', 'off')
+           and is_state('binary_sensor.ev_charging_active', 'on')
+           and is_state('binary_sensor.ev_price_cheap', 'off')
+           and not is_state('binary_sensor.ev_price_cheap', 'unavailable')
+           and not is_state('binary_sensor.ev_price_cheap', 'unknown') %}
+      {{ cheap_start or emergency or deadline_start or pause_backstop }}
 
   # 8b. "Charge now" pressed (dashboard button or notification action)
   - id: manual_charge_now
@@ -212,7 +274,9 @@ triggers:
     entity_id: input_boolean.ev_stop_charging_requested
     to: "on"
 
-  # 9. Catch up gracefully after a Home Assistant restart
+  # 9. Catch up gracefully after a Home Assistant restart. Also runs the
+  #    reconcile branch below, because a template trigger does not fire for
+  #    already-true state at startup.
   - id: ha_restart
     trigger: homeassistant
     event: start
@@ -486,15 +550,16 @@ actions:
                       message: "DRY RUN: stop charging action skipped"
 
       # -----------------------------------------------------------------
-      # Periodic check: low-battery emergency override + departure
-      # deadline + pausing an auto-started charge when the price isn't
-      # cheap. The connected/charging-active guards used to gate this whole
-      # entry; they now live per sub-branch, because the pause path needs
-      # to run while charging IS active.
+      # Reconcile: low-battery emergency override + departure deadline +
+      # pausing an auto-started charge when the price isn't cheap. Driven
+      # by the event-based `reconcile` trigger and by `ha_restart` (a
+      # template trigger cannot fire for already-true state at startup).
+      # The connected/charging-active guards live per sub-branch, because
+      # the pause path needs to run while charging IS active.
       # -----------------------------------------------------------------
       - conditions:
           - condition: trigger
-            id: periodic_check
+            id: [reconcile, ha_restart]
         sequence:
           - choose:
               # Low battery emergency: bypass smart waiting entirely
@@ -596,7 +661,7 @@ actions:
                     value_template: >-
                       {% set cal = state_attr('sensor.ev_smart_charging_config', 'departure_calendar_entity') %}
                       {% if cal and state_attr(cal, 'start_time') %}
-                        {% set next_dep = strptime(state_attr(cal, 'start_time'), '%Y-%m-%d %H:%M:%S') %}
+                        {% set next_dep = as_local(strptime(state_attr(cal, 'start_time'), '%Y-%m-%d %H:%M:%S')) %}
                         {{ ((next_dep - now()).total_seconds() / 60) <= (deadline_lead_time_minutes | float(120)) }}
                       {% else %}
                         {% set dep = states('input_datetime.ev_departure_time') %}
@@ -638,7 +703,7 @@ actions:
                               message: "DRY RUN: start charging action skipped"
 
               # Auto-started charge while the price isn't cheap: pause it.
-              # 10-minute backstop for the charging_started pause branch
+              # Event-driven backstop for the charging_started pause branch
               # (covers e.g. a charger that restarts on its own, a missed
               # start event, or HA restarting mid-auto-start). Guards are
               # the same as should_stop_charging.
